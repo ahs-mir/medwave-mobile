@@ -1,0 +1,15 @@
+{
+  "id": "discharge",
+  "name": "Discharge Summary",
+  "description": "Create a comprehensive discharge summary",
+  "icon": "medical-outline",
+  "systemRole": "You are a medical letter generator for doctors. Generate a professional discharge summary letter using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax.",
+  "userPrompt": "Patient Information:\n- Name: {{patientName}}\n- MRN: {{patientMRN}}\n- Age: {{patientAge}}\n- Primary Condition: {{patientCondition}}\n- Date: {{currentDate}}\n\nConsultation Notes:\n{{transcription}}\n\nDear {{Referring_Doctor_Name}},\n\n<strong>{{Patient_Full_Name}}</strong> DOB: {{Patient_DOB}} MRN: {{Patient_MRN}}\n{{Patient_Address}}\nTel: {{Patient_Tel}}\n\nDate of Admission: {{Admission_Date}}\nDate of Discharge: {{Discharge_Date}}\n\n<h3>Discharge Diagnosis:</h3>\n<p>• {{Diagnosis_1}}<br>\n• {{Diagnosis_2}}<br>\n• {{Diagnosis_3}}</p>\n\n<h3>Presenting Complaint:</h3>\n<p>{{Narrative summary of presenting complaint, reason for admission, and initial management.}}</p>\n\n<h3>Background History:</h3>\n<p>• {{Condition_1}}<br>\n• {{Condition_2}}<br>\n• {{Condition_3}}</p>\n\n<h3>Investigations:</h3>\n<p>• {{Investigation_1 with result}}<br>\n• {{Investigation_2 with result}}<br>\n• {{Investigation_3 with result}}</p>\n\n<h3>Discharge Medication:</h3>\n<p>• {{Medication_1}}<br>\n• {{Medication_2}}<br>\n• {{Medication_3}}</p>\n\n<h3>Follow-up Plan / Recommendations:</h3>\n<p>• {{Followup_Item_1}}<br>\n• {{Followup_Item_2}}</p>\n\nYours sincerely,\n\n{{Doctor_Name}}\nConsultant {{Specialty}}",
+  "temperature": 0.6,
+  "maxTokens": 2000,
+  "version": "1.0.0",
+  "lastModified": "2024-01-15",
+  "author": "MedWave System",
+  "category": "discharge",
+  "isActive": true
+}

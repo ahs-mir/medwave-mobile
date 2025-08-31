@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2024-01-15",
+  "totalPrompts": 6,
+  "categories": [
+    "clinical",
+    "consultation", 
+    "referral",
+    "discharge",
+    "soap",
+    "generic"
+  ],
+  "prompts": [
+    {
+      "id": "clinical",
+      "name": "Clinical Letter",
+      "description": "Generate a comprehensive clinical letter",
+      "icon": "medical-outline",
+      "category": "clinical",
+      "isActive": true,
+      "file": "clinical.json"
+    },
+    {
+      "id": "consultation",
+      "name": "Consultation Letter", 
+      "description": "Create a consultation letter with detailed paragraphs",
+      "icon": "document-text-outline",
+      "category": "consultation",
+      "isActive": true,
+      "file": "consultation.json"
+    },
+    {
+      "id": "referral",
+      "name": "Referral Letter",
+      "description": "Generate a referral letter to another specialist",
+      "icon": "clipboard-outline", 
+      "category": "referral",
+      "isActive": true,
+      "file": "referral.json"
+    },
+    {
+      "id": "discharge",
+      "name": "Discharge Summary",
+      "description": "Create a comprehensive discharge summary",
+      "icon": "medical-outline",
+      "category": "discharge", 
+      "isActive": true,
+      "file": "discharge.json"
+    },
+    {
+      "id": "soap",
+      "name": "SOAP Note",
+      "description": "Convert consultation into a professional SOAP note format",
+      "icon": "document-text-outline",
+      "category": "soap",
+      "isActive": true,
+      "file": "soap.json"
+    },
+    {
+      "id": "generic",
+      "name": "Generic Letter",
+      "description": "Generate a generic clinical letter with standard formatting",
+      "icon": "document-outline",
+      "category": "generic",
+      "isActive": true,
+      "file": "generic.json"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "soap",
+  "name": "SOAP Note",
+  "description": "Convert consultation into a professional SOAP note format",
+  "icon": "document-text-outline",
+  "systemRole": "You are a medical professional. Convert this consultation into a professional SOAP note format using HTML tags. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs.",
+  "userPrompt": "Patient: {{patientName}} ({{patientAge}}y)\nCondition: {{patientCondition}}\n\nConsultation transcription:\n{{transcription}}\n\nPlease format as a proper SOAP note using HTML:\n\n<h3><strong>SUBJECTIVE:</strong></h3>\n<p>[Content here]</p>\n\n<h3><strong>OBJECTIVE:</strong></h3>\n<p>[Content here]</p>\n\n<h3><strong>ASSESSMENT:</strong></h3>\n<p>[Content here]</p>\n\n<h3><strong>PLAN:</strong></h3>\n<p>[Content here]</p>\n\nUse proper medical terminology and HTML formatting.",
+  "temperature": 0.6,
+  "maxTokens": 1000,
+  "version": "1.0.0",
+  "lastModified": "2024-01-15",
+  "author": "MedWave System",
+  "category": "soap",
+  "isActive": true
+}

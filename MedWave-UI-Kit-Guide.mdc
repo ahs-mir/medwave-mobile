@@ -1,0 +1,117 @@
+
+# 🧩 MedWave UI Kit – Layout & Style Guide (For AI Reference)
+
+**Purpose**: This guide provides consistent design and layout rules for AI (Cursor or other assistants) to use when generating or updating components for the MedWave app.
+
+**Style**: Minimal, professional, mobile-first, Tailwind CSS-based.  
+**Inspiration**: Uber, Apple Health, Epic Systems.
+
+---
+
+## 🎨 Visual Style
+
+| Element        | Tailwind Classes                                | Notes                              |
+|----------------|--------------------------------------------------|------------------------------------|
+| Font           | `font-sans`                                      | System UI or Inter                 |
+| Headline       | `text-xl font-bold text-black`                   | Section titles                     |
+| Subtext        | `text-sm text-gray-500`                          | Captions, labels                   |
+| Body Text      | `text-base text-gray-700`                        | General paragraph content          |
+| Spacing        | `p-4`, `py-6`, `gap-4`                           | Maintain breathing room            |
+| Border Radius  | `rounded-xl`, `rounded-2xl`                      | Default for cards and modals       |
+| Shadow         | `shadow-sm`, `shadow-md`                         | Use sparingly                      |
+| Colors         | `bg-white`, `text-black`, `text-gray-500`       | Medical neutral, clean aesthetic   |
+| Icons          | Lucide or Heroicons (`w-5 h-5`, `w-6 h-6`)       | For consistent style               |
+
+---
+
+## 🗺️ Layout Patterns
+
+### 1. Screen Container
+```html
+<div class="p-4 bg-gray-50 min-h-screen">
+  <!-- Content here -->
+</div>
+```
+
+### 2. Section Card
+```html
+<div class="bg-white rounded-xl shadow-sm p-4">
+  <h2 class="text-xl font-bold mb-2">Section Title</h2>
+  <p class="text-sm text-gray-500">Description or data</p>
+</div>
+```
+
+### 3. Button Styles
+```html
+<!-- Primary -->
+<button class="bg-black text-white px-4 py-2 rounded-lg text-sm">Save</button>
+
+<!-- Secondary -->
+<button class="bg-gray-100 text-black px-4 py-2 rounded-lg text-sm">Cancel</button>
+
+<!-- Danger -->
+<button class="text-red-500 text-sm">Delete</button>
+```
+
+### 4. Form Elements
+```html
+<label class="text-sm font-medium text-gray-700">Field Label</label>
+<input class="mt-1 w-full p-2 border border-gray-300 rounded-lg text-sm" />
+```
+
+### 5. Bottom Navigation (Tab Bar)
+```html
+<div class="fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around py-2 shadow-sm">
+  <button class="flex flex-col items-center text-gray-700">
+    <HomeIcon class="w-6 h-6" />
+    <span class="text-xs">Patients</span>
+  </button>
+  <!-- Add 3 more tabs: Letters, Summary, Settings -->
+</div>
+```
+
+---
+
+## 🧠 Component Library & Structure
+
+| Component Name   | Description                                      |
+|------------------|--------------------------------------------------|
+| `PatientCard`    | Name, Age, Tags, Tap to open details             |
+| `VoiceNoteBox`   | Record/stop button, mic icon, text preview      |
+| `LetterTypeGrid` | 2-column icon cards: Referral, Discharge, etc.  |
+| `LetterEditor`   | Title, editable sections, add field, export     |
+| `ExportModal`    | Format buttons + confirmation message           |
+| `BottomNav`      | Fixed nav with 4 tabs: Patients, Letters, Summary, Settings |
+
+---
+
+## 🔄 App Flow Summary
+
+```
+Patients → Select Patient → Dictate/Type Note → Improve → Generate Letter →
+Pick Letter Type → Edit Letter → Export
+```
+
+---
+
+## ✅ AI Design Rules
+
+- Always use Tailwind utility classes  
+- Maintain mobile-first responsive layout  
+- Avoid clutter — use progressive disclosure  
+- Show only what the user needs at each step  
+- Favor clarity over creativity (form follows function)  
+- Use consistent spacing, rounding, and typography  
+
+---
+
+## ✨ Tailwind Pro Usage
+
+- Allowed and encouraged for all component building blocks  
+- Customize spacing, color, and interactivity as needed for clinical workflows  
+- Avoid marketing-heavy components (e.g., carousels or pricing grids)
+
+---
+
+> ℹ️ When working with Cursor AI, reference this file in your prompts:
+> “Use the design guide in `docs/medwave-ui-kit.md` for all UI components.”
