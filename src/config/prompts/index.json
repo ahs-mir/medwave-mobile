@@ -1,14 +1,15 @@
 {
   "version": "1.0.0",
   "lastUpdated": "2024-01-15",
-  "totalPrompts": 6,
+  "totalPrompts": 8,
   "categories": [
     "clinical",
     "consultation", 
     "referral",
     "discharge",
     "soap",
-    "generic"
+    "generic",
+    "custom"
   ],
   "prompts": [
     {
@@ -17,17 +18,26 @@
       "description": "Generate a comprehensive clinical letter",
       "icon": "medical-outline",
       "category": "clinical",
-      "isActive": true,
+      "isActive": false,
       "file": "clinical.json"
     },
     {
       "id": "consultation",
-      "name": "Consultation Letter", 
-      "description": "Create a consultation letter with detailed paragraphs",
+      "name": "Consultation Letter (With Headings)", 
+      "description": "Letter with section headings",
       "icon": "document-text-outline",
       "category": "consultation",
       "isActive": true,
       "file": "consultation.json"
+    },
+    {
+      "id": "consultation-paragraph",
+      "name": "Consultation (Paragraphs Only)",
+      "description": "Letter without section headings",
+      "icon": "document-outline",
+      "category": "consultation",
+      "isActive": true,
+      "file": "consultation-paragraph.json"
     },
     {
       "id": "referral",
@@ -35,7 +45,7 @@
       "description": "Generate a referral letter to another specialist",
       "icon": "clipboard-outline", 
       "category": "referral",
-      "isActive": true,
+      "isActive": false,
       "file": "referral.json"
     },
     {
@@ -44,8 +54,17 @@
       "description": "Create a comprehensive discharge summary",
       "icon": "medical-outline",
       "category": "discharge", 
-      "isActive": true,
+      "isActive": false,
       "file": "discharge.json"
+    },
+    {
+      "id": "custom",
+      "name": "Custom Letter",
+      "description": "Follow your instructions",
+      "icon": "create-outline",
+      "category": "custom",
+      "isActive": true,
+      "file": "custom.json"
     },
     {
       "id": "soap",

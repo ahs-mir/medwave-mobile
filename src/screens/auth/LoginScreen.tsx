@@ -23,10 +23,6 @@ export const LoginScreen = ({ navigation }: any) => {
   
   const { login } = useAuth();
 
-  const fillRizwanCredentials = () => {
-    setEmail('rizwan@medwave.com');
-    setPassword('Rizwan123!');
-  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -170,25 +166,7 @@ export const LoginScreen = ({ navigation }: any) => {
               )}
             </TouchableOpacity>
 
-            {/* Quick Login Section */}
-            <View style={styles.testSection}>
-              <Text style={styles.testTitle}>Quick Login</Text>
-              <TouchableOpacity
-                style={styles.quickLoginButton}
-                onPress={fillRizwanCredentials}
-                disabled={isLoading}
-              >
-                <Ionicons name="person-circle-outline" size={20} color="#374151" />
-                <Text style={styles.quickLoginButtonText}>Dr. Rizwan</Text>
-              </TouchableOpacity>
-            </View>
 
-            <TouchableOpacity
-              style={styles.registerButton}
-              onPress={() => navigation.navigate('Register')}
-            >
-              <Text style={styles.registerButtonText}>Don't have an account? Sign Up</Text>
-            </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
@@ -301,34 +279,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  testSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 20,
-  },
-  testTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  testButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  testButton: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  testButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
-  },
   footer: {
     alignItems: 'center',
     marginTop: 24,
@@ -337,29 +287,5 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     color: '#9CA3AF',
-  },
-  registerButton: {
-    alignSelf: 'center',
-    marginTop: 16,
-  },
-  registerButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  quickLoginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  quickLoginButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
   },
 });

@@ -11,12 +11,14 @@ import {
   StatusBar,
   Platform,
   useWindowDimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RenderHtml from 'react-native-render-html';
-import { LetterFrontend } from '../../types';
+import { LetterFrontend, PatientFrontend } from '../../types';
 import SimpleStreamingService from '../../services/SimpleStreamingService';
+import ApiService from '../../services/ApiService';
 
 interface LetterDetailScreenProps {
   navigation: any;
@@ -33,6 +35,38 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [patientDetails, setPatientDetails] = useState<PatientFrontend | null>(null);
+  const [loadingPatient, setLoadingPatient] = useState(true);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
+  // Fetch patient details on component mount
+  useEffect(() => {
+    const fetchPatientDetails = async () => {
+      if (letter.patientId) {
+        try {
+          const apiService = new ApiService();
+          const patient = await apiService.getPatient(letter.patientId);
+          setPatientDetails(patient);
+        } catch (error) {
+          console.error('Failed to fetch patient details:', error);
+        } finally {
+          setLoadingPatient(false);
+        }
+      } else {
+        setLoadingPatient(false);
+      }
+    };
+
+    fetchPatientDetails();
+  }, [letter.patientId]);
+
+  // Close overflow menu when component loses focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      setShowOverflowMenu(false);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleDeleteLetter = async () => {
     Alert.alert(
@@ -74,17 +108,73 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
     });
   };
 
+  const formatLetterType = (type: string) => {
+    if (!type) return 'Consultation Letter';
+    
+    // Convert to title case
+    return type
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'created':
-        return '#10B981';
-      case 'approved':
-        return '#3B82F6';
-      case 'posted':
-        return '#8B5CF6';
       case 'draft':
+        return '#6B7280'; // Gray
+      case 'created':
+        return '#10B981'; // Green
+      case 'approved':
+        return '#3B82F6'; // Blue
+      case 'posted':
+        return '#10B981'; // Green
       default:
         return '#6B7280';
+    }
+  };
+
+  const getStatusBackgroundColor = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return '#F9FAFB'; // Lighter gray
+      case 'created':
+        return '#F0FDF4'; // Very light green
+      case 'approved':
+        return '#EFF6FF'; // Very light blue (bg-blue-50)
+      case 'posted':
+        return '#F0FDF4'; // Very light green
+      default:
+        return '#F9FAFB';
+    }
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return '#E5E7EB'; // Gray border
+      case 'created':
+        return '#BBF7D0'; // Light green border
+      case 'approved':
+        return '#DBEAFE'; // Light blue border (border-blue-200)
+      case 'posted':
+        return '#BBF7D0'; // Light green border
+      default:
+        return '#E5E7EB';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return 'document-outline';
+      case 'created':
+        return 'checkmark-circle';
+      case 'approved':
+        return 'checkmark-done';
+      case 'posted':
+        return 'send';
+      default:
+        return 'document-outline';
     }
   };
 
@@ -92,12 +182,52 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  // Action handlers
+  const handleApprove = async () => {
+    Alert.alert(
+      'Approve Letter',
+      'Are you sure you want to approve this letter?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          onPress: async () => {
+            // TODO: Implement approve functionality
+            Alert.alert('Success', 'Letter approved successfully');
+          }
+        }
+      ]
+    );
+  };
+
+  const handleEdit = () => {
+    // TODO: Navigate to edit screen
+    Alert.alert('Edit', 'Edit functionality coming soon');
+  };
+
+  const handlePost = async () => {
+    Alert.alert(
+      'Post Letter',
+      'Are you sure you want to post this letter?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Post',
+          onPress: async () => {
+            // TODO: Implement post functionality
+            Alert.alert('Success', 'Letter posted successfully');
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+      <View style={styles.header}>
         <TouchableOpacity 
           onPress={() => navigation.goBack()} 
           style={styles.backButton}
@@ -106,104 +236,130 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Letter Details</Text>
-          <Text style={styles.headerSubtitle}>{patientName}</Text>
-        </View>
-        
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDeleteLetter}
-          disabled={isDeleting}
-        >
-          {isDeleting ? (
-            <ActivityIndicator size="small" color="#EF4444" />
-          ) : (
-            <Ionicons name="trash-outline" size={20} color="#EF4444" />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Letter Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Type:</Text>
-            <Text style={styles.infoValue}>{letter.type || 'Clinical Letter'}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Status:</Text>
-            <View style={styles.statusContainer}>
-              <View 
-                style={[
-                  styles.statusDot, 
-                  { backgroundColor: getStatusColor(letter.status) }
-                ]} 
-              />
-              <Text style={styles.statusText}>
+          {/* Title Row: Patient Name + Status Badge */}
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {patientName}
+            </Text>
+            <View style={[
+              styles.compactStatusBadge,
+              { 
+                backgroundColor: getStatusBackgroundColor(letter.status),
+                borderColor: getStatusBorderColor(letter.status)
+              }
+            ]}>
+              <Text style={[styles.compactStatusText, { color: getStatusColor(letter.status) }]}>
                 {getStatusText(letter.status)}
               </Text>
             </View>
           </View>
           
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Created:</Text>
-            <Text style={styles.infoValue}>{formatDate(letter.createdAt)}</Text>
+          {/* Subtitle Row: Type + Metadata */}
+          <View style={styles.headerSubtitleRow}>
+            <Text style={styles.headerSubtitle}>
+              {formatLetterType(letter.type)}
+            </Text>
+            <Text style={styles.headerMetadataSeparator}>•</Text>
+            <Text style={styles.headerMetadataText}>
+              Created {formatDate(letter.createdAt)}
+            </Text>
+            {letter.updatedAt !== letter.createdAt && (
+              <>
+                <Text style={styles.headerMetadataSeparator}>•</Text>
+                <Text style={styles.headerMetadataText}>
+                  Updated {formatDate(letter.updatedAt)}
+                </Text>
+              </>
+            )}
           </View>
-          
-          {letter.updatedAt !== letter.createdAt && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Updated:</Text>
-              <Text style={styles.infoValue}>{formatDate(letter.updatedAt)}</Text>
-            </View>
-          )}
         </View>
+        
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setShowOverflowMenu(!showOverflowMenu)}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color="#6B7280" />
+        </TouchableOpacity>
+        
+        {/* Overflow Menu */}
+        {showOverflowMenu && (
+          <>
+            <TouchableOpacity 
+              style={styles.menuBackdrop} 
+              activeOpacity={1}
+              onPress={() => setShowOverflowMenu(false)}
+            />
+            <View style={styles.overflowMenu}>
+              <TouchableOpacity
+                style={styles.overflowMenuItem}
+                onPress={() => {
+                  setShowOverflowMenu(false);
+                  handleDeleteLetter();
+                }}
+                disabled={isDeleting}
+              >
+                <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                <Text style={styles.overflowMenuText}>Delete Letter</Text>
+                {isDeleting && <ActivityIndicator size="small" color="#EF4444" style={{ marginLeft: 8 }} />}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+
+
+      {/* Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        onScrollBeginDrag={() => setShowOverflowMenu(false)}
+      >
 
         {/* Letter Content */}
-        <View style={styles.contentCard}>
-          <Text style={styles.contentTitle}>Letter Content</Text>
-          <View style={styles.contentContainer}>
+        <View style={styles.contentArea}>
             {letter.content ? (
               <RenderHtml
-                contentWidth={width - 64} // Account for padding and margins
+                contentWidth={width - 64} // Account for px-4 safe padding
                 source={{ html: letter.content }}
                 baseStyle={styles.htmlContent}
                 tagsStyles={{
-                  p: {
-                    fontSize: 16,
-                    lineHeight: 24,
-                    color: '#374151',
-                    marginBottom: 16,
-                    marginTop: 8,
-                  },
-                  h1: {
-                    fontSize: 24,
-                    fontWeight: 'bold',
-                    color: '#111827',
-                    marginBottom: 16,
-                    marginTop: 24,
-                    lineHeight: 32,
-                  },
-                  h2: {
-                    fontSize: 20,
-                    fontWeight: 'bold',
-                    color: '#111827',
+                  p: { 
+                    fontSize: 14, // text-sm
+                    color: '#374151', // text-gray-700
+                    lineHeight: 22, // leading-relaxed
                     marginBottom: 12,
-                    marginTop: 20,
-                    lineHeight: 28,
                   },
-                  h3: {
-                    fontSize: 18,
-                    fontWeight: 'bold',
+                  h1: { 
+                    fontSize: 16, // text-base
+                    fontWeight: '600', // font-semibold
+                    marginBottom: 4, // mb-1
                     color: '#111827',
-                    marginBottom: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#E5E7EB',
+                    paddingBottom: 8,
                     marginTop: 16,
-                    lineHeight: 26,
+                  },
+                  h2: { 
+                    fontSize: 16, // text-base
+                    fontWeight: '600', // font-semibold
+                    marginBottom: 4, // mb-1
+                    color: '#111827',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#E5E7EB',
+                    paddingBottom: 8,
+                    marginTop: 16,
+                  },
+                  h3: { 
+                    fontSize: 16, // text-base
+                    fontWeight: '600', // font-semibold
+                    marginBottom: 4, // mb-1
+                    color: '#111827',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#E5E7EB',
+                    paddingBottom: 8,
+                    marginTop: 16,
                   },
                   strong: {
                     fontWeight: 'bold',
@@ -221,19 +377,13 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
                     fontStyle: 'italic',
                     color: '#374151',
                   },
-                  ul: {
-                    marginLeft: 20,
-                    marginBottom: 16,
-                  },
-                  ol: {
-                    marginLeft: 20,
-                    marginBottom: 16,
-                  },
-                  li: {
-                    fontSize: 16,
-                    lineHeight: 24,
-                    color: '#374151',
-                    marginBottom: 8,
+                  ul: { marginBottom: 12, paddingLeft: 16 },
+                  ol: { marginBottom: 12, paddingLeft: 16 },
+                  li: { 
+                    marginBottom: 4,
+                    fontSize: 14, // text-sm
+                    color: '#374151', // text-gray-700
+                    lineHeight: 22, // leading-relaxed
                   },
                   br: {
                     marginBottom: 8,
@@ -249,11 +399,46 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
                 }}
               />
             ) : (
-              <Text style={styles.contentText}>No content available</Text>
+              <Text style={styles.noContentText}>No content available</Text>
+            )}
+        </View>
+      </ScrollView>
+
+        {/* Fixed Bottom Action Bar */}
+        <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.actionButtonContainer}>
+            {/* Always show Edit button - Secondary */}
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.editButton]}
+              onPress={handleEdit}
+            >
+              <Ionicons name="create-outline" size={20} color="#6B7280" />
+              <Text style={[styles.actionButtonText, styles.editButtonText]}>Edit</Text>
+            </TouchableOpacity>
+            
+            {/* Show Approve button only for draft letters - Primary */}
+            {(letter.status === 'draft' || letter.status === 'created') && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.approveButton]}
+                onPress={handleApprove}
+              >
+                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>Approve</Text>
+              </TouchableOpacity>
+            )}
+            
+            {/* Show Post button only for approved letters - Primary */}
+            {letter.status === 'approved' && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.postButton]}
+                onPress={handlePost}
+              >
+                <Ionicons name="send" size={20} color="#FFFFFF" />
+                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>Post</Text>
+              </TouchableOpacity>
             )}
           </View>
         </View>
-      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -270,7 +455,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    minHeight: 60,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -285,80 +472,104 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8, // mb-2 equivalent
+  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 18, // text-lg
+    fontWeight: '600', // font-semibold
     color: '#111827',
-    marginBottom: 2,
+    marginRight: 8,
+  },
+  compactStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 20, // h-5 equivalent
+  },
+  compactStatusText: {
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16, // gap-x-4 equivalent (16px = 4 * 4)
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 12, // text-xs
+    color: '#6B7280', // text-gray-500
+    fontWeight: '500',
   },
-  deleteButton: {
+  headerMetadataText: {
+    fontSize: 12, // text-xs
+    color: '#6B7280', // text-gray-500
+    fontWeight: '400',
+  },
+  headerMetadataSeparator: {
+    fontSize: 12, // text-xs
+    color: '#6B7280', // text-gray-500
+    marginHorizontal: 0, // gap handles spacing
+  },
+  menuButton: {
     padding: 8,
     marginLeft: 8,
   },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999,
+  },
+  overflowMenu: {
+    position: 'absolute',
+    top: '100%',
+    right: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    minWidth: 160,
+    zIndex: 1000,
+  },
+  overflowMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  overflowMenuText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '500',
+  },
   scrollView: {
     flex: 1,
+    marginBottom: 80, // Space for fixed bottom bar
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: 16, // px-4 safe padding like medical apps
+    paddingVertical: 16,
+    paddingBottom: 20,
+    flexGrow: 1,
   },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#111827',
-    fontWeight: '500',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#111827',
-    fontWeight: '500',
-  },
-  contentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+  contentArea: {
+    paddingVertical: 16,
   },
   contentTitle: {
     fontSize: 16,
@@ -366,21 +577,73 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 12,
   },
-  contentContainer: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  contentText: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#374151',
+  noContentText: {
+    fontSize: 14, // text-sm
+    color: '#9CA3AF', // text-gray-400
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 32,
   },
   htmlContent: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#374151',
+    fontSize: 14, // text-sm
+    lineHeight: 22, // leading-relaxed
+    color: '#374151', // text-gray-700
+  },
+  // Bottom Action Bar Styles
+  bottomActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  actionButtonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14, // Taller buttons
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 48, // Consistent height
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  // Primary buttons (filled)
+  approveButton: {
+    backgroundColor: '#10B981', // Green primary
+    borderColor: '#10B981',
+  },
+  postButton: {
+    backgroundColor: '#3B82F6', // Blue primary
+    borderColor: '#3B82F6',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+  },
+  // Secondary buttons (outlined)
+  editButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D1D5DB',
+  },
+  editButtonText: {
+    color: '#6B7280',
   },
 });

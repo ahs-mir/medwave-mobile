@@ -126,13 +126,19 @@ class LetterService {
           gptResult = await this.gptService.generateClinicalLetter(transcription, patientInfo);
           break;
         case 'consultation':
-          gptResult = await this.gptService.generateConsultationLetter(transcription, patientInfo);
+          gptResult = await this.gptService.generateLetter(transcription, patientInfo, 'consultation');
+          break;
+        case 'consultation-paragraph':
+          gptResult = await this.gptService.generateLetter(transcription, patientInfo, 'consultation-paragraph');
           break;
         case 'referral':
           gptResult = await this.gptService.generateClinicalLetter(transcription, patientInfo); // Use clinical for referral
           break;
         case 'discharge':
           gptResult = await this.gptService.generateDischargeLetter(transcription, patientInfo);
+          break;
+        case 'custom':
+          gptResult = await this.gptService.generateLetter(transcription, patientInfo, 'custom');
           break;
         default:
           gptResult = await this.gptService.generateClinicalLetter(transcription, patientInfo);

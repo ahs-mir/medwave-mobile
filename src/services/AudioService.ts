@@ -150,7 +150,12 @@ class AudioService {
 
   dispose(): void {
     if (this.isRecording && this.recording) {
-      this.recording.stopAsync();
+      try {
+        // Properly handle async cleanup to prevent crashes
+        this.recording.stopAsync().catch(console.error);
+      } catch (error) {
+        console.error('Error stopping recording during dispose:', error);
+      }
     }
     this.isRecording = false;
     this.recording = null;

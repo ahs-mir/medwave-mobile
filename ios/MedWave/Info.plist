@@ -27,14 +27,14 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.anonymous.RWave</string>
-          <string>com.anonymous.RWave</string>
+          <string>com.anonymous.MedWave</string>
+          <string>com.anonymous.MedWave</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+rwave</string>
+          <string>exp+medwave</string>
         </array>
       </dict>
     </array>
@@ -57,6 +57,8 @@
     <string>Allow MedWave to access your microphone for recording medical consultations.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Allow MedWave to access your photo library to select patient documents.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>MedWave may access your location to help you find nearby medical facilities and provide location-based medical services.</string>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

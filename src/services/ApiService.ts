@@ -474,16 +474,24 @@ class ApiService {
       
       if (response.success && response.user) {
         const user = response.user;
+        // Convert snake_case to camelCase for consistent handling
+        const camelCaseUser = toCamelCase(user);
+        
+        // Extract names with proper fallbacks
+        const firstName = camelCaseUser.firstName || camelCaseUser.first_name || user.first_name || 'Unknown';
+        const lastName = camelCaseUser.lastName || camelCaseUser.last_name || user.last_name || 'User';
+        const fullName = camelCaseUser.fullName || camelCaseUser.name || user.name || `${firstName} ${lastName}`.trim();
+        
         return {
           id: user.id,
           email: user.email,
-          firstName: user.first_name || user.firstName,
-          lastName: user.last_name || user.lastName,
-          fullName: user.name || `${user.first_name || user.firstName} ${user.last_name || user.lastName}`.trim(),
+          firstName: firstName,
+          lastName: lastName,
+          fullName: fullName,
           role: user.role,
-          isActive: user.is_active || user.isActive,
-          createdAt: user.created_at || user.createdAt,
-          updatedAt: user.updated_at || user.updatedAt,
+          isActive: user.is_active || user.isActive || true,
+          createdAt: user.created_at || user.createdAt || new Date().toISOString(),
+          updatedAt: user.updated_at || user.updatedAt || new Date().toISOString(),
           doctorId: user.doctorId
         };
       }

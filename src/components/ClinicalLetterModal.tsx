@@ -125,7 +125,7 @@ const ClinicalLetterModal: React.FC<Props> = ({
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="chevron-down" size={24} color="#374151" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Clinical Letter</Text>
+          <Text style={styles.headerTitle}>Generated Letter</Text>
           <View style={styles.headerSpacer} />
         </View>
 

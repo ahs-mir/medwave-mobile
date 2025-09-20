@@ -1,7 +1,7 @@
 // src/services/GPTService.ts
 import { streamOpenAI } from '../lib/openaiStream';
 import StorageService from './StorageService';
-import { LETTER_PROMPTS, IMPROVEMENT_PROMPTS, getPatientPrompt } from '../config/aiPrompts';
+import { LETTER_PROMPTS, IMPROVEMENT_PROMPTS } from '../config/aiPrompts';
 import { loadPrompt, replacePromptPlaceholders } from '../config/aiPrompts';
 
 export interface GPTResult {
@@ -149,7 +149,6 @@ class GPTService {
           const replacements = {
             patientName: patientInfo.name || 'Unknown Patient',
             patientMRN: patientInfo.medicalNumber || patientInfo.id || 'N/A',
-            patientAge: patientInfo.age || 'N/A',
             patientCondition: patientInfo.condition || 'General consultation',
             currentDate: new Date().toLocaleDateString(),
             transcription: transcription || ''
@@ -161,10 +160,11 @@ class GPTService {
           throw new Error('Failed to load clinical prompt configuration');
         }
       } catch (error) {
-        console.warn('⚠️ Failed to load configured prompt, using fallback:', error);
-        // Fallback to legacy method
-        prompt = getPatientPrompt('clinical', patientInfo, transcription);
-        systemRole = "You are a medical letter generator for doctors. Generate professional clinical letters using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax like ** or ##.";
+        console.error('❌ Failed to load clinical prompt configuration:', error);
+        return {
+          success: false,
+          error: 'Failed to load clinical prompt configuration. Please try again.'
+        };
       }
 
       return new Promise((resolve) => {
@@ -223,7 +223,6 @@ class GPTService {
           const replacements = {
             patientName: patientInfo.name || 'Unknown Patient',
             patientMRN: patientInfo.medicalNumber || patientInfo.id || 'N/A',
-            patientAge: patientInfo.age || 'N/A',
             patientCondition: patientInfo.condition || 'General consultation',
             currentDate: new Date().toLocaleDateString(),
             transcription: transcription || ''
@@ -235,39 +234,11 @@ class GPTService {
           throw new Error('Failed to load consultation prompt configuration');
         }
       } catch (error) {
-        console.warn('⚠️ Failed to load configured prompt, using fallback:', error);
-        // Fallback to hardcoded prompt
-        prompt = `Generate the BODY of a professional consultation letter with detailed paragraphs (NO header, NO contact block, NO salutations or signatures, and NO placeholders) based on this information:
-
-Patient Information:
-- Name: ${patientInfo.name}
-- MRN: ${patientInfo.medicalNumber || patientInfo.id}
-- Age: ${patientInfo.age || 'N/A'}
-- Primary Condition: ${patientInfo.condition || 'General consultation'}
-- Date: ${new Date().toLocaleDateString()}
-
-Consultation Notes:
-${transcription}
-
-Please create detailed body paragraphs only with optional section headings. Include:
-
-Patient Demographics (inline): ${patientInfo.name}; MRN ${patientInfo.medicalNumber || patientInfo.id}; Age ${patientInfo.age || 'N/A'}; Primary Condition ${patientInfo.condition || 'General consultation'}.
-
-Consultation Details:
-[Intro and chief complaint]
-
-[History of present illness]
-
-[Exam findings]
-
-[Assessment and differential]
-
-[Treatment recommendations]
-
-[Follow-up plan]
-
-Output only the body paragraphs (plain text). No header, no footer, no placeholders, no salutations, no signature.`;
-        systemRole = "You are a medical letter generator for doctors. Generate the BODY of a professional consultation letter using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax.";
+        console.error('❌ Failed to load consultation prompt configuration:', error);
+        return {
+          success: false,
+          error: 'Failed to load consultation prompt configuration. Please try again.'
+        };
       }
 
       return new Promise((resolve) => {
@@ -326,7 +297,6 @@ Output only the body paragraphs (plain text). No header, no footer, no placehold
           const replacements = {
             patientName: patientInfo.name || 'Unknown Patient',
             patientMRN: patientInfo.medicalNumber || patientInfo.id || 'N/A',
-            patientAge: patientInfo.age || 'N/A',
             patientCondition: patientInfo.condition || 'General consultation',
             currentDate: new Date().toLocaleDateString(),
             transcription: transcription || ''
@@ -338,61 +308,11 @@ Output only the body paragraphs (plain text). No header, no footer, no placehold
           throw new Error('Failed to load discharge prompt configuration');
         }
       } catch (error) {
-        console.warn('⚠️ Failed to load configured prompt, using fallback:', error);
-        // Fallback to hardcoded prompt
-        prompt = `You are a medical letter generator for doctors. Using the dictated notes, produce a professional discharge summary letter in the following structure and tone. Replace the placeholders with the provided patient and doctor details.
-
-Patient Information:
-- Name: ${patientInfo.name}
-- MRN: ${patientInfo.medicalNumber || patientInfo.id}
-- Age: ${patientInfo.age || 'N/A'}
-- Primary Condition: ${patientInfo.condition || 'General consultation'}
-- Date: ${new Date().toLocaleDateString()}
-
-Consultation Notes:
-${transcription}
-
-Dear {{Referring_Doctor_Name}},
-
-{{Patient_Full_Name}} DOB: {{Patient_DOB}} MRN: {{Patient_MRN}}
-{{Patient_Address}}
-Tel: {{Patient_Tel}}
-
-Date of Admission: {{Admission_Date}}
-Date of Discharge: {{Discharge_Date}}
-
-Discharge Diagnosis:
-• {{Diagnosis_1}}
-• {{Diagnosis_2}}
-• {{Diagnosis_3}}
-
-Presenting Complaint:
-{{Narrative summary of presenting complaint, reason for admission, and initial management.}}
-
-Background History:
-• {{Condition_1}}
-• {{Condition_2}}
-• {{Condition_3}}
-
-Investigations:
-• {{Investigation_1 with result}}
-• {{Investigation_2 with result}}
-• {{Investigation_3 with result}}
-
-Discharge Medication:
-• {{Medication_1}}
-• {{Medication_2}}
-• {{Medication_3}}
-
-Follow-up Plan / Recommendations:
-• {{Followup_Item_1}}
-• {{Followup_Item_2}}
-
-Yours sincerely,
-
-{{Doctor_Name}}
-Consultant {{Specialty}}`;
-        systemRole = "You are a medical letter generator for doctors. Generate a professional discharge summary letter using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax.";
+        console.error('❌ Failed to load discharge prompt configuration:', error);
+        return {
+          success: false,
+          error: 'Failed to load discharge prompt configuration. Please try again.'
+        };
       }
 
       return new Promise((resolve) => {
@@ -517,7 +437,6 @@ Use proper medical terminology and formatting.`;
           const replacements = {
             patientName: patientInfo.name || 'Unknown Patient',
             patientMRN: patientInfo.medicalNumber || patientInfo.id || 'N/A',
-            patientAge: patientInfo.age || 'N/A',
             patientCondition: patientInfo.condition || 'General consultation',
             currentDate: new Date().toLocaleDateString(),
             transcription: transcription || ''
@@ -529,38 +448,11 @@ Use proper medical terminology and formatting.`;
           throw new Error('Failed to load clinical prompt configuration');
         }
       } catch (error) {
-        console.warn('⚠️ Failed to load configured prompt, using fallback:', error);
-        // Fallback to hardcoded prompt
-        prompt = `Generate the BODY of a professional clinical letter based on this information (NO header, NO contact block, NO salutations like Dear/Sincerely, NO signature lines, and NO placeholders like [Your Name]):
-
-Patient Information:
-- Name: ${patientInfo.name}
-- MRN: ${patientInfo.medicalNumber || patientInfo.id}
-- Age: ${patientInfo.age || 'N/A'}
-- Primary Condition: ${patientInfo.condition || 'General consultation'}
-- Date: ${new Date().toLocaleDateString()}
-
-Consultation Notes:
-${transcription}
-
-Please create a comprehensive letter BODY with clean, professional formatting. Use paragraph text with optional section headings only. Include these sections in order, but DO NOT include any greeting or closing/signature:
-
-Patient Demographics (inline): ${patientInfo.name}; MRN ${patientInfo.medicalNumber || patientInfo.id}; Age ${patientInfo.age || 'N/A'}; Primary Condition ${patientInfo.condition || 'General consultation'}.
-
-Clinical Assessment:
-[Detailed clinical assessment based on transcription]
-
-Diagnostic Findings:
-[Diagnostic findings and test results based on transcription]
-
-Treatment Plan:
-[Comprehensive treatment plan based on transcription]
-
-Follow-up Recommendations:
-[Follow-up recommendations and monitoring plan based on transcription]
-
-Output only the body paragraphs (plain text). No header, no footer, no placeholders, no salutations, no signature.`;
-        systemRole = "You are a medical letter generator for doctors. Generate professional clinical letters using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax like ** or ##.";
+        console.error('❌ Failed to load clinical prompt configuration:', error);
+        return {
+          success: false,
+          error: 'Failed to load clinical prompt configuration. Please try again.'
+        };
       }
 
       // Use SSE streaming
@@ -591,29 +483,8 @@ Output only the body paragraphs (plain text). No header, no footer, no placehold
         yield* generator();
         
       } catch (streamingError) {
-        console.warn('⚠️ SSE streaming failed, trying fallback method:', streamingError);
-        
-        // Fallback to non-streaming method
-        try {
-          const fallbackResult = await this.generateClinicalLetter(transcription, patientInfo);
-          
-          if (!fallbackResult.success) {
-            throw new Error(fallbackResult.error || 'Fallback generation failed');
-          }
-          
-          // Yield the complete content from fallback
-          yield {
-            success: true,
-            content: fallbackResult.text || '',
-            isComplete: true
-          };
-          
-          console.log('✅ Fallback letter generation completed');
-          
-        } catch (fallbackError) {
-          console.error('❌ Both SSE and fallback failed:', fallbackError);
-          throw new Error(`Letter generation failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`);
-        }
+        console.error('❌ SSE streaming failed:', streamingError);
+        throw new Error(`Letter generation failed: ${streamingError instanceof Error ? streamingError.message : 'Unknown error'}`);
       }
 
     } catch (error) {
@@ -622,6 +493,84 @@ Output only the body paragraphs (plain text). No header, no footer, no placehold
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
         isComplete: true
+      };
+    }
+  }
+
+  /**
+   * Generic letter generation method that can handle any letter type
+   */
+  async generateLetter(transcription: string, patientInfo: any, letterType: string): Promise<GPTResult> {
+    try {
+      console.log(`📋 Generating ${letterType} letter with GPT-4o-mini...`);
+
+      const apiKey = await this.getApiKey();
+      if (!apiKey) {
+        return {
+          success: false,
+          error: 'OpenAI API key not configured. Please add your API key in Settings.'
+        };
+      }
+
+      // Load the configured prompt with system role
+      let prompt: string;
+      let systemRole: string;
+      
+      try {
+        const promptConfig = await loadPrompt(letterType);
+        if (promptConfig) {
+          // Use the configured prompt
+          const replacements = {
+            patientName: patientInfo.name || 'Unknown Patient',
+            patientMRN: patientInfo.medicalNumber || patientInfo.id || 'N/A',
+            patientCondition: patientInfo.condition || 'General consultation',
+            currentDate: new Date().toLocaleDateString(),
+            transcription: transcription || ''
+          };
+          prompt = replacePromptPlaceholders(promptConfig.userPrompt, replacements);
+          systemRole = promptConfig.systemRole;
+          console.log(`✅ Using configured ${letterType} prompt with system role`);
+        } else {
+          throw new Error(`Failed to load ${letterType} prompt configuration`);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to load configured prompt for ${letterType}:`, error);
+        return {
+          success: false,
+          error: `Failed to load ${letterType} prompt configuration. Please try again.`
+        };
+      }
+
+      // Make API call using streamOpenAI
+      return new Promise((resolve) => {
+        let accumulatedText = '';
+        
+        const cancel = streamOpenAI({
+          prompt,
+          systemRole,
+          onToken: (text) => {
+            accumulatedText += text;
+          },
+          onEnd: () => {
+            resolve({
+              success: true,
+              text: accumulatedText.trim()
+            });
+          },
+          onError: (error) => {
+            resolve({
+              success: false,
+              error: error instanceof Error ? error.message : 'Letter generation failed'
+            });
+          }
+        });
+      });
+
+    } catch (error) {
+      console.error('❌ Letter generation failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
     }
   }

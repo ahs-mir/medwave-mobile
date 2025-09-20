@@ -114,11 +114,15 @@ export const PatientDetailScreen = React.memo(({ navigation, route }: any) => {
       case 'clinical':
         return 'Clinical Letter';
       case 'consultation':
-        return 'Consultation Letter';
+        return 'Consultation Letter (With Headings)';
+      case 'consultation-paragraph':
+        return 'Consultation (Paragraphs Only)';
       case 'referral':
         return 'Referral Letter';
       case 'discharge':
         return 'Discharge Summary';
+      case 'custom':
+        return 'Custom Letter';
       case 'soap':
         return 'SOAP Note';
       default:
@@ -380,6 +384,25 @@ export const PatientDetailScreen = React.memo(({ navigation, route }: any) => {
     }
   }, [transcription, isRecording, isTranscribing]);
 
+  // Critical cleanup on component unmount to prevent audio recording crashes
+  useEffect(() => {
+    return () => {
+      // Cleanup timer - prevents memory leaks
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      
+      // Cleanup audio recording - prevents shared_ptr crashes
+      if (isRecording) {
+        AudioService.stopRecording().catch(console.error);
+      }
+      
+      // Reset audio service to clear any lingering references
+      AudioService.resetRecording();
+    };
+  }, []); // Empty dependency array means this runs on unmount only
+
   const formatLastSaved = () => {
     if (!lastSaved) return null;
     const now = new Date();
@@ -393,25 +416,35 @@ export const PatientDetailScreen = React.memo(({ navigation, route }: any) => {
   };
 
   const letterTypes = [
-    {
-      id: 'clinical',
-      title: 'Clinical Letter',
-      description: 'Comprehensive clinical assessment',
-    },
+    // {
+    //   id: 'clinical',
+    //   title: 'Clinical Letter',
+    //   description: 'Comprehensive clinical assessment',
+    // },
     {
       id: 'consultation',
-      title: 'Consultation Letter',
-      description: 'Detailed paragraphs in body',
+      title: 'Consultation Letter (With Headings)',
+      description: 'Letter with section headings',
     },
     {
-      id: 'referral',
-      title: 'Referral Letter',
-      description: 'Referral to specialist',
+      id: 'consultation-paragraph',
+      title: 'Consultation (Paragraphs Only)',
+      description: 'Letter without section headings',
     },
+    // {
+    //   id: 'referral',
+    //   title: 'Referral Letter',
+    //   description: 'Referral to specialist',
+    // },
+    // {
+    //   id: 'discharge',
+    //   title: 'Discharge Summary',
+    //   description: 'Comprehensive discharge summary',
+    // },
     {
-      id: 'discharge',
-      title: 'Discharge Summary',
-      description: 'Comprehensive discharge summary',
+      id: 'custom',
+      title: 'Custom Letter',
+      description: 'Follow your instructions',
     },
   ];
 

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -27,12 +28,43 @@ export const LettersScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'created' | 'approved' | 'posted'>('all');
+  const [sortBy, setSortBy] = useState<'dateCreated' | 'dateUpdated' | 'patientName'>('dateCreated');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
-  // Filter letters based on selected status
+  // Filter and sort letters
   const filteredLetters = useMemo(() => {
-    if (selectedFilter === 'all') return letters;
-    return letters.filter(letter => letter.status === selectedFilter);
-  }, [letters, selectedFilter]);
+    let filtered = selectedFilter === 'all' ? letters : letters.filter(letter => letter.status === selectedFilter);
+    
+    // Sort the filtered letters
+    filtered.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'patientName':
+          aValue = (a.patientName || a.patient_name || 'Unknown Patient').toLowerCase();
+          bValue = (b.patientName || b.patient_name || 'Unknown Patient').toLowerCase();
+          break;
+        case 'dateUpdated':
+          aValue = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at);
+          bValue = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at);
+          break;
+        case 'dateCreated':
+        default:
+          aValue = new Date(a.createdAt || a.created_at);
+          bValue = new Date(b.createdAt || b.created_at);
+          break;
+      }
+      
+      if (sortBy === 'patientName') {
+        return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      } else {
+        return sortOrder === 'asc' ? aValue.getTime() - bValue.getTime() : bValue.getTime() - aValue.getTime();
+      }
+    });
+    
+    return filtered;
+  }, [letters, selectedFilter, sortBy, sortOrder]);
 
   // Helper function to get letter count text
   const getLetterCountText = (count: number) => {
@@ -183,11 +215,41 @@ export const LettersScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'draft': return '#64748B';
-      case 'created': return '#F59E0B';
-      case 'approved': return '#10B981';
-      case 'posted': return '#0F172A';
-      default: return '#64748B';
+      case 'draft': return '#6B7280';
+      case 'created': return '#6B7280';
+      case 'approved': return '#3B82F6';
+      case 'posted': return '#10B981';
+      default: return '#6B7280';
+    }
+  };
+
+  const getStatusBackgroundColor = (status: string) => {
+    switch (status) {
+      case 'draft': return '#F9FAFB';
+      case 'created': return '#F9FAFB';
+      case 'approved': return '#EFF6FF';
+      case 'posted': return '#F0FDF4';
+      default: return '#F9FAFB';
+    }
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'draft': return '#E5E7EB';
+      case 'created': return '#E5E7EB';
+      case 'approved': return '#DBEAFE';
+      case 'posted': return '#BBF7D0';
+      default: return '#E5E7EB';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'draft': return 'Draft';
+      case 'created': return 'Draft';
+      case 'approved': return 'Approved';
+      case 'posted': return 'Posted';
+      default: return 'Draft';
     }
   };
 
@@ -212,18 +274,22 @@ export const LettersScreen = () => {
 
   // Helper function to format letter type with proper capitalization
   const formatLetterType = (type: string): string => {
-    if (!type) return 'Clinical Letter';
+    if (!type) return 'Consultation Letter (With Headings)';
     
     // Handle specific letter types
     switch (type.toLowerCase()) {
       case 'clinical':
         return 'Clinical Letter';
       case 'consultation':
-        return 'Consultation Letter';
+        return 'Consultation Letter (With Headings)';
+      case 'consultation-paragraph':
+        return 'Consultation (Paragraphs Only)';
       case 'referral':
         return 'Referral Letter';
       case 'discharge':
         return 'Discharge Summary';
+      case 'custom':
+        return 'Custom Letter';
       case 'soap':
         return 'SOAP Note';
       default:
@@ -269,7 +335,7 @@ export const LettersScreen = () => {
     const patientId = item.patientId || item.patient_id || item.patientid || item.patient?.id;
     const status = item.status || 'unknown';
     const createdAt = item.createdAt || item.created_at || new Date().toISOString();
-    const letterType = item.type || 'Clinical Letter';
+    const letterType = item.type || 'Consultation Letter (With Headings)';
 
     // Clean up patient name
     if (patientName === 'Unknown Patient' && patientId) {
@@ -292,9 +358,22 @@ export const LettersScreen = () => {
       >
         <View style={styles.listItemContent}>
           <View style={styles.listInfoSection}>
-            <Text style={styles.listPatientName} numberOfLines={1}>
-              {patientName}
-            </Text>
+            <View style={styles.listHeaderRow}>
+              <Text style={styles.listPatientName} numberOfLines={1}>
+                {patientName}
+              </Text>
+              <View style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: getStatusBackgroundColor(status),
+                  borderColor: getStatusBorderColor(status),
+                }
+              ]}>
+                <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
+                  {getStatusText(status)}
+                </Text>
+              </View>
+            </View>
             <Text style={styles.listLetterType}>{formatLetterType(letterType)}</Text>
             <Text style={styles.listDate}>{formatDate(createdAt)}</Text>
           </View>
@@ -415,8 +494,18 @@ export const LettersScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Letters</Text>
-        <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Letters</Text>
+            <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.sortButton}
+            onPress={() => setShowSortMenu(true)}
+          >
+            <Ionicons name="options-outline" size={24} color="#0F172A" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filter Controls */}
@@ -473,6 +562,75 @@ export const LettersScreen = () => {
         }
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Sort/Filter Modal */}
+      <Modal
+        visible={showSortMenu}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSortMenu(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Sort & Filter</Text>
+              <TouchableOpacity
+                onPress={() => setShowSortMenu(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Sort Options */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Sort by</Text>
+              {[
+                { key: 'dateCreated', label: 'Date Created' },
+                { key: 'dateUpdated', label: 'Date Updated' },
+                { key: 'patientName', label: 'Patient Name' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setSortBy(option.key as any);
+                    setShowSortMenu(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option.label}</Text>
+                  {sortBy === option.key && (
+                    <Ionicons name="checkmark" size={20} color="#3B82F6" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Sort Order */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Order</Text>
+              {[
+                { key: 'desc', label: sortBy === 'patientName' ? 'Z to A' : 'Newest First' },
+                { key: 'asc', label: sortBy === 'patientName' ? 'A to Z' : 'Oldest First' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setSortOrder(option.key as any);
+                    setShowSortMenu(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option.label}</Text>
+                  {sortOrder === option.key && (
+                    <Ionicons name="checkmark" size={20} color="#3B82F6" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -488,6 +646,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  sortButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   title: {
     fontSize: 32,
@@ -602,11 +772,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  listHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   listPatientName: {
     fontSize: 15,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 1,
+    flex: 1,
   },
   listLetterType: {
     fontSize: 13,
@@ -626,23 +802,17 @@ const styles = StyleSheet.create({
     minWidth: 20,
   },
   statusBadge: {
-    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 3,
-    minWidth: 45,
     justifyContent: 'center',
-  },
-  statusIcon: {
-    marginRight: 0,
   },
   statusText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textTransform: 'capitalize',
+    fontWeight: '600',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   listArrowSection: {
@@ -705,5 +875,60 @@ const styles = StyleSheet.create({
   },
   filterChipCountTextActive: {
     color: '#FFFFFF',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 34,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
   },
 });

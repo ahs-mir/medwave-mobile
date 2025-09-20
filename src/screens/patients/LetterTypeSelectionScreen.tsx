@@ -18,29 +18,41 @@ export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const letterTypes = [
-    {
-      id: 'clinical',
-      title: 'Clinical Letter',
-      description: 'Generate a comprehensive clinical letter',
-      icon: 'medical-outline',
-    },
+    // {
+    //   id: 'clinical',
+    //   title: 'Clinical Letter',
+    //   description: 'Generate a comprehensive clinical letter',
+    //   icon: 'medical-outline',
+    // },
     {
       id: 'consultation',
-      title: 'Consultation Letter',
-      description: 'Create a consultation letter with detailed paragraphs',
+      title: 'Consultation Letter (With Headings)',
+      description: 'Letter with section headings',
       icon: 'document-text-outline',
     },
     {
-      id: 'referral',
-      title: 'Referral Letter',
-      description: 'Generate a referral letter to another specialist',
-      icon: 'clipboard-outline',
+      id: 'consultation-paragraph',
+      title: 'Consultation (Paragraphs Only)',
+      description: 'Letter without section headings',
+      icon: 'document-outline',
     },
+    // {
+    //   id: 'referral',
+    //   title: 'Referral Letter',
+    //   description: 'Generate a referral letter to another specialist',
+    //   icon: 'clipboard-outline',
+    // },
+    // {
+    //   id: 'discharge',
+    //   title: 'Discharge Summary',
+    //   description: 'Create a comprehensive discharge summary',
+    //   icon: 'medical-outline',
+    // },
     {
-      id: 'discharge',
-      title: 'Discharge Summary',
-      description: 'Create a comprehensive discharge summary',
-      icon: 'medical-outline',
+      id: 'custom',
+      title: 'Custom Letter',
+      description: 'Follow your instructions',
+      icon: 'create-outline',
     },
   ];
 

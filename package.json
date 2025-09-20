@@ -1,7 +1,7 @@
 {
   "name": "medwave",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -70,46 +70,5 @@
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
   },
-  "private": true,
-  "expo": {
-    "name": "MedWave",
-    "slug": "medwave",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.medwave.app"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.medwave.app"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png",
-      "bundler": "metro"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-av",
-      "expo-audio",
-      "expo-speech",
-      "expo-print",
-      "expo-sharing",
-      "expo-image-picker",
-      "expo-file-system"
-    ]
-  }
+      "private": true
 }

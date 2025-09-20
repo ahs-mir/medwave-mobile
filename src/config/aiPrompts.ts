@@ -216,29 +216,31 @@ function getPromptLoader(): PromptLoader {
  * Falls back to legacy prompts if configurable prompt fails
  */
 export async function loadPrompt(promptId: string): Promise<PromptConfig | null> {
-  // TEMPORARILY DISABLED: Use legacy prompts to fix letter type swapping issue
-  console.log(`⚠️ Configurable prompts temporarily disabled, using legacy prompt: ${promptId}`);
-  return LETTER_PROMPTS[promptId] || null;
-  
-  /* Original code commented out until we fix the prompt loading issue
   try {
     const loader = getPromptLoader();
     const prompt = await loader.loadPrompt(promptId);
     if (prompt) {
       return {
+        id: prompt.id,
+        name: prompt.name,
+        description: prompt.description,
+        icon: prompt.icon,
         systemRole: prompt.systemRole,
         userPrompt: prompt.userPrompt,
         temperature: prompt.temperature,
-        maxTokens: prompt.maxTokens
+        maxTokens: prompt.maxTokens,
+        version: prompt.version,
+        lastModified: prompt.lastModified,
+        author: prompt.author,
+        category: prompt.category,
+        isActive: prompt.isActive
       };
     }
+    return null;
   } catch (error) {
-    console.warn(`Failed to load configurable prompt ${promptId}, falling back to legacy:`, error);
+    console.error(`Failed to load prompt ${promptId}:`, error);
+    return null;
   }
-
-  // Fallback to legacy prompts
-  return LETTER_PROMPTS[promptId] || null;
-  */
 }
 
 /**

@@ -69,8 +69,11 @@ class PromptLoader {
    * Load a specific prompt by ID
    */
   async loadPrompt(promptId: string): Promise<PromptConfig | null> {
-    // Check cache first
-    if (this.promptsCache.has(promptId)) {
+    // For development, always reload to get latest changes
+    // In production, you might want to keep the cache
+    if (__DEV__) {
+      this.promptsCache.delete(promptId);
+    } else if (this.promptsCache.has(promptId)) {
       return this.promptsCache.get(promptId)!;
     }
 
@@ -98,27 +101,53 @@ class PromptLoader {
    */
   private getPromptData(promptId: string): PromptConfig | null {
     try {
+      console.log(`🔍 Loading prompt data for: ${promptId}`);
+      let promptData: PromptConfig | null = null;
+      
       switch (promptId) {
         case 'clinical':
-          return require('./prompts/clinical.json');
+          promptData = require('./prompts/clinical.json');
+          break;
         case 'consultation':
-          return require('./prompts/consultation.json');
+          promptData = require('./prompts/consultation.json');
+          break;
+        case 'consultation-paragraph':
+          promptData = require('./prompts/consultation-paragraph.json');
+          break;
         case 'referral':
-          return require('./prompts/referral.json');
+          promptData = require('./prompts/referral.json');
+          break;
         case 'discharge':
-          return require('./prompts/discharge.json');
+          promptData = require('./prompts/discharge.json');
+          break;
+        case 'custom':
+          promptData = require('./prompts/custom.json');
+          break;
         case 'soap':
-          return require('./prompts/soap.json');
+          promptData = require('./prompts/soap.json');
+          break;
         case 'generic':
-          return require('./prompts/generic.json');
+          promptData = require('./prompts/generic.json');
+          break;
         default:
           console.warn(`Unknown prompt ID: ${promptId}`);
           return null;
       }
+      
+      console.log(`✅ Loaded prompt data for ${promptId}:`, promptData ? 'SUCCESS' : 'NULL');
+      return promptData;
     } catch (error) {
-      console.error(`Failed to load prompt file for ${promptId}:`, error);
+      console.error(`❌ Failed to load prompt file for ${promptId}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Clear the prompt cache
+   */
+  clearCache(): void {
+    this.promptsCache.clear();
+    this.indexCache = null;
   }
 
   /**
@@ -162,29 +191,41 @@ class PromptLoader {
    * Validate prompt data structure
    */
   private validatePrompt(promptData: any): promptData is PromptConfig {
+    if (!promptData || typeof promptData !== 'object') {
+      console.error('❌ Prompt validation failed: Invalid prompt data structure');
+      return false;
+    }
+
     const requiredFields = [
       'id', 'name', 'description', 'icon', 'systemRole', 
       'userPrompt', 'temperature', 'maxTokens', 'version', 
       'lastModified', 'author', 'category', 'isActive'
     ];
 
-    return requiredFields.every(field => promptData.hasOwnProperty(field)) &&
-           typeof promptData.id === 'string' &&
-           typeof promptData.name === 'string' &&
-           typeof promptData.systemRole === 'string' &&
-           typeof promptData.userPrompt === 'string' &&
-           typeof promptData.temperature === 'number' &&
-           typeof promptData.maxTokens === 'number' &&
-           typeof promptData.isActive === 'boolean';
+    const missingFields = requiredFields.filter(field => !promptData.hasOwnProperty(field));
+    if (missingFields.length > 0) {
+      console.error('❌ Prompt validation failed: Missing fields:', missingFields);
+      return false;
+    }
+
+    const typeErrors = [];
+    if (typeof promptData.id !== 'string') typeErrors.push('id should be string');
+    if (typeof promptData.name !== 'string') typeErrors.push('name should be string');
+    if (typeof promptData.systemRole !== 'string') typeErrors.push('systemRole should be string');
+    if (typeof promptData.userPrompt !== 'string') typeErrors.push('userPrompt should be string');
+    if (typeof promptData.temperature !== 'number') typeErrors.push('temperature should be number');
+    if (typeof promptData.maxTokens !== 'number') typeErrors.push('maxTokens should be number');
+    if (typeof promptData.isActive !== 'boolean') typeErrors.push('isActive should be boolean');
+
+    if (typeErrors.length > 0) {
+      console.error('❌ Prompt validation failed: Type errors:', typeErrors);
+      return false;
+    }
+
+    console.log('✅ Prompt validation passed');
+    return true;
   }
 
-  /**
-   * Clear the cache (useful for development/testing)
-   */
-  clearCache(): void {
-    this.promptsCache.clear();
-    this.indexCache = null;
-  }
 
   /**
    * Get prompt metadata without loading full content

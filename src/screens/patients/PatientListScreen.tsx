@@ -24,9 +24,9 @@ type PatientListScreenNavigationProp = StackNavigationProp<AppStackParamList>;
 export const PatientListScreen = () => {
   const navigation = useNavigation<PatientListScreenNavigationProp>();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [patients, setPatients] = useState<PatientFrontend[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<PatientFrontend[]>([]);
   const [patientLetters, setPatientLetters] = useState<{[key: string]: any[]}>({});
@@ -184,20 +184,15 @@ export const PatientListScreen = () => {
       );
     }
     
-    // Apply sorting
+    // Apply sorting (alphabetically ascending)
     processedPatients.sort((a, b) => {
       const nameA = a.name.toLowerCase();
       const nameB = b.name.toLowerCase();
-      
-      if (sortOrder === 'asc') {
-        return nameA.localeCompare(nameB);
-      } else {
-        return nameB.localeCompare(nameA);
-      }
+      return nameA.localeCompare(nameB);
     });
     
     setFilteredPatients(processedPatients);
-  }, [searchQuery, patients, sortOrder, activeTab, patientLetters]);
+  }, [searchQuery, patients, activeTab, patientLetters]);
 
 
 
@@ -268,7 +263,14 @@ export const PatientListScreen = () => {
       <View style={styles.header}>
         <View>
           <Text style={styles.welcomeText}>Welcome</Text>
-          <Text style={styles.doctorName}>Dr. Rizwan</Text>
+          <Text style={styles.doctorName}>
+            {user ? 
+              (user.firstName && user.lastName ? 
+                `Dr. ${user.firstName} ${user.lastName}` : 
+                user.fullName ? `Dr. ${user.fullName}` : 'Dr. User') : 
+              'Doctor'
+            }
+          </Text>
         </View>
         <View style={styles.headerControls}>
           {/* Refresh Button */}
@@ -283,17 +285,6 @@ export const PatientListScreen = () => {
             <Ionicons name="refresh" size={20} color="#6B7280" />
           </TouchableOpacity>
           
-          {/* Sort Button */}
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-          >
-            <Ionicons 
-              name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} 
-              size={20} 
-              color="#6B7280" 
-            />
-          </TouchableOpacity>
           
           {/* Add Patient Button */}
           <TouchableOpacity 

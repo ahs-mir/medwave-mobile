@@ -105,7 +105,7 @@ class PDFService {
       await shareAsync(pdfUri, {
         UTI: '.pdf',
         mimeType: 'application/pdf',
-        dialogTitle: 'Share Clinical Letter',
+        dialogTitle: 'Share Generated Letter',
       });
     } catch (error) {
       console.error('PDF sharing failed:', error);

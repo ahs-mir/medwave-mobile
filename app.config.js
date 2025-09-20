@@ -1,0 +1,45 @@
+module.exports = {
+  expo: {
+    name: "MedWave",
+    slug: "medwave",
+    version: "1.0.0",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "light",
+    splash: {
+      image: "./assets/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff"
+    },
+    assetBundlePatterns: [
+      "**/*"
+    ],
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.anonymous.MedWave",
+      icon: "./assets/icon.png",
+      buildNumber: "1"
+    },
+    android: {
+      adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#ffffff"
+      },
+      package: "com.anonymous.MedWave",
+      versionCode: 1
+    },
+    web: {
+      favicon: "./assets/favicon.png",
+      bundler: "metro"
+    },
+    extra: {
+      eas: {
+        projectId: "dd546335-b1ca-41c4-b066-d4626f5013d1"
+      }
+    },
+    runtimeVersion: "1.0.0",
+    updates: {
+      url: "https://u.expo.dev/dd546335-b1ca-41c4-b066-d4626f5013d1"
+    }
+  }
+};
