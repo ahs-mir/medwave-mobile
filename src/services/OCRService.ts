@@ -1,11 +1,14 @@
 // src/services/OCRService.ts
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import ApiService from './ApiService'; // Import ApiService
 
 export interface OCRResult {
   success: boolean;
   data?: {
     name?: string;
+    firstName?: string;
+    lastName?: string;
     dateOfBirth?: string;
     medicalNumber?: string;
     confidence: number;
@@ -15,128 +18,62 @@ export interface OCRResult {
 
 class OCRService {
   /**
-   * Extract patient data from image using device's built-in OCR
+   * Extract patient data from an image using the backend API.
    */
   async extractPatientDataFromFile(imageUri: string): Promise<OCRResult> {
     try {
-      console.log('📱 Using device built-in OCR for:', imageUri);
+
+      // The backend expects multipart/form-data, so we create it
+      const formData = new FormData();
       
-      if (Platform.OS === 'ios') {
-        return await this.extractWithiOSOCR(imageUri);
+      // The 'uri' needs to be the file path, and we need to guess the type
+      const fileType = imageUri.includes('.png') ? 'image/png' : 'image/jpeg';
+      
+      // The backend endpoint is expecting an array of 'files'
+      formData.append('files', {
+        uri: imageUri,
+        name: `upload_${Date.now()}.jpg`,
+        type: fileType,
+      } as any);
+
+
+      // Use a custom method in ApiService or a direct fetch call
+      // to handle multipart/form-data upload
+      const response = await ApiService.uploadPatientDocument(formData);
+
+      // The backend returns a list of patients. We will take the first one.
+      const patientData = response.extractedPatients?.[0];
+
+      if (patientData && patientData.name && patientData.name !== 'Unable to extract name') {
+        return {
+          success: true,
+          data: {
+            name: patientData.name,
+            firstName: patientData.firstName,
+            lastName: patientData.lastName,
+            dateOfBirth: patientData.dob,
+            medicalNumber: patientData.medicalNumber,
+            confidence: patientData.confidence || 0.95
+          }
+        };
       } else {
-        return await this.extractWithAndroidOCR(imageUri);
+        const errorMessage = patientData?.notes || 'No patient data could be extracted from the document.';
+        return {
+          success: false,
+          error: errorMessage,
+        };
       }
     } catch (error) {
-      console.error('OCR extraction error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'OCR extraction failed'
+        error: `Failed to process document: ${errorMessage}`,
       };
     }
   }
 
   /**
-   * iOS built-in OCR using Vision framework
-   */
-  private async extractWithiOSOCR(imageUri: string): Promise<OCRResult> {
-    try {
-      // Convert image to base64 for processing
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Use iOS Vision framework through native module
-      // This will use the device's built-in OCR capabilities
-      const result = await this.processImageWithVision(base64Image);
-      
-      return {
-        success: true,
-        data: {
-          name: result.name,
-          dateOfBirth: result.dateOfBirth,
-          medicalNumber: result.medicalNumber,
-          confidence: result.confidence || 0.8
-        }
-      };
-    } catch (error) {
-      console.error('iOS OCR error:', error);
-      return {
-        success: false,
-        error: 'iOS OCR processing failed'
-      };
-    }
-  }
-
-  /**
-   * Android OCR using ML Kit or similar
-   */
-  private async extractWithAndroidOCR(imageUri: string): Promise<OCRResult> {
-    try {
-      // For Android, we'll use a simpler approach
-      // You can integrate ML Kit Text Recognition here
-      console.log('🤖 Android OCR not implemented yet');
-      
-      return {
-        success: false,
-        error: 'Android OCR not implemented'
-      };
-    } catch (error) {
-      console.error('Android OCR error:', error);
-      return {
-        success: false,
-        error: 'Android OCR processing failed'
-      };
-    }
-  }
-
-  /**
-   * Process image with iOS Vision framework
-   */
-  private async processImageWithVision(base64Image: string): Promise<any> {
-    // This is a simplified implementation
-    // In a real app, you'd use a native module to access Vision framework
-    
-    // For now, let's simulate the OCR process
-    // In production, you'd use a library like react-native-vision-camera
-    // or create a native module to access Vision framework directly
-    
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Simulate OCR extraction
-        const mockData = {
-          name: 'John Doe',
-          dateOfBirth: '1985-03-15',
-          medicalNumber: 'MRN-123456789',
-          confidence: 0.85
-        };
-        resolve(mockData);
-      }, 2000);
-    });
-  }
-
-  /**
-   * Extract text from image using device's built-in capabilities
-   */
-  async extractTextFromImage(imageUri: string): Promise<string> {
-    try {
-      console.log('📝 Extracting text from image...');
-      
-      // This would use the device's built-in text recognition
-      // For iOS, this would use Vision framework
-      // For Android, this would use ML Kit Text Recognition
-      
-      // Simulate text extraction
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return 'Sample extracted text from document';
-    } catch (error) {
-      console.error('Text extraction error:', error);
-      throw new Error('Failed to extract text from image');
-    }
-  }
-
-  /**
-   * Check if device supports OCR
+   * Check if device supports OCR (now backend-based)
    */
   isOCRSupported(): boolean {
     return Platform.OS === 'ios' || Platform.OS === 'android';

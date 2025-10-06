@@ -35,6 +35,8 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
   const [patientDetails, setPatientDetails] = useState<PatientFrontend | null>(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
@@ -44,8 +46,7 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
     const fetchPatientDetails = async () => {
       if (letter.patientId) {
         try {
-          const apiService = new ApiService();
-          const patient = await apiService.getPatient(letter.patientId);
+          const patient = await ApiService.getPatient(letter.patientId);
           setPatientDetails(patient);
         } catch (error) {
           console.error('Failed to fetch patient details:', error);
@@ -103,7 +104,7 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     });
   };
@@ -192,18 +193,30 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
         {
           text: 'Approve',
           onPress: async () => {
-            // TODO: Implement approve functionality
-            Alert.alert('Success', 'Letter approved successfully');
+            try {
+              setIsApproving(true);
+              const success = await ApiService.updateLetterStatus(letter.id, 'approved');
+              if (success) {
+                Alert.alert('Success', 'Letter approved successfully');
+                // Update the letter status locally
+                letter.status = 'approved';
+                // Navigate back to refresh the letters list
+                navigation.goBack();
+              } else {
+                Alert.alert('Error', 'Failed to approve letter. Please try again.');
+              }
+            } catch (error) {
+              console.error('Error approving letter:', error);
+              Alert.alert('Error', 'Failed to approve letter. Please try again.');
+            } finally {
+              setIsApproving(false);
+            }
           }
         }
       ]
     );
   };
 
-  const handleEdit = () => {
-    // TODO: Navigate to edit screen
-    Alert.alert('Edit', 'Edit functionality coming soon');
-  };
 
   const handlePost = async () => {
     Alert.alert(
@@ -214,8 +227,24 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
         {
           text: 'Post',
           onPress: async () => {
-            // TODO: Implement post functionality
-            Alert.alert('Success', 'Letter posted successfully');
+            try {
+              setIsPosting(true);
+              const success = await ApiService.updateLetterStatus(letter.id, 'posted');
+              if (success) {
+                Alert.alert('Success', 'Letter posted successfully');
+                // Update the letter status locally
+                letter.status = 'posted';
+                // Navigate back to refresh the letters list
+                navigation.goBack();
+              } else {
+                Alert.alert('Error', 'Failed to post letter. Please try again.');
+              }
+            } catch (error) {
+              console.error('Error posting letter:', error);
+              Alert.alert('Error', 'Failed to post letter. Please try again.');
+            } finally {
+              setIsPosting(false);
+            }
           }
         }
       ]
@@ -232,46 +261,16 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
           onPress={() => navigation.goBack()} 
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color="#000000" />
+          <Ionicons name="chevron-back" size={24} color="#2D3748" />
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
-          {/* Title Row: Patient Name + Status Badge */}
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {patientName}
-            </Text>
-            <View style={[
-              styles.compactStatusBadge,
-              { 
-                backgroundColor: getStatusBackgroundColor(letter.status),
-                borderColor: getStatusBorderColor(letter.status)
-              }
-            ]}>
-              <Text style={[styles.compactStatusText, { color: getStatusColor(letter.status) }]}>
-                {getStatusText(letter.status)}
-              </Text>
-            </View>
-          </View>
-          
-          {/* Subtitle Row: Type + Metadata */}
-          <View style={styles.headerSubtitleRow}>
-            <Text style={styles.headerSubtitle}>
-              {formatLetterType(letter.type)}
-            </Text>
-            <Text style={styles.headerMetadataSeparator}>•</Text>
-            <Text style={styles.headerMetadataText}>
-              Created {formatDate(letter.createdAt)}
-            </Text>
-            {letter.updatedAt !== letter.createdAt && (
-              <>
-                <Text style={styles.headerMetadataSeparator}>•</Text>
-                <Text style={styles.headerMetadataText}>
-                  Updated {formatDate(letter.updatedAt)}
-                </Text>
-              </>
-            )}
-          </View>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {patientName}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {formatLetterType(letter.type)}
+          </Text>
         </View>
         
         <TouchableOpacity
@@ -280,6 +279,38 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
         >
           <Ionicons name="ellipsis-vertical" size={20} color="#6B7280" />
         </TouchableOpacity>
+      </View>
+
+      {/* Status Section */}
+      <View style={styles.statusSection}>
+        <View style={styles.statusMetadataContainer}>
+          <Text style={styles.statusMetadata}>
+            Created {formatDate(letter.createdAt)}
+          </Text>
+          {letter.updatedAt !== letter.createdAt && (
+            <Text style={styles.statusMetadata}>
+              Updated {formatDate(letter.updatedAt)}
+            </Text>
+          )}
+        </View>
+        <View style={[
+          styles.statusBadge,
+          { 
+            backgroundColor: getStatusBackgroundColor(letter.status),
+            borderColor: getStatusBorderColor(letter.status)
+          }
+        ]}>
+          <Ionicons 
+            name={getStatusIcon(letter.status)} 
+            size={16} 
+            color={getStatusColor(letter.status)} 
+            style={styles.statusIcon}
+          />
+          <Text style={[styles.statusText, { color: getStatusColor(letter.status) }]}>
+            {getStatusText(letter.status)}
+          </Text>
+        </View>
+      </View>
         
         {/* Overflow Menu */}
         {showOverflowMenu && (
@@ -305,8 +336,6 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
             </View>
           </>
         )}
-      </View>
-
 
       {/* Content */}
       <ScrollView 
@@ -407,34 +436,39 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
         {/* Fixed Bottom Action Bar */}
         <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.actionButtonContainer}>
-            {/* Always show Edit button - Secondary */}
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.editButton]}
-              onPress={handleEdit}
-            >
-              <Ionicons name="create-outline" size={20} color="#6B7280" />
-              <Text style={[styles.actionButtonText, styles.editButtonText]}>Edit</Text>
-            </TouchableOpacity>
-            
             {/* Show Approve button only for draft letters - Primary */}
             {(letter.status === 'draft' || letter.status === 'created') && (
               <TouchableOpacity 
-                style={[styles.actionButton, styles.approveButton]}
+                style={[styles.actionButton, styles.approveButton, isApproving && styles.disabledButton]}
                 onPress={handleApprove}
+                disabled={isApproving}
               >
-                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>Approve</Text>
+                {isApproving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                )}
+                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>
+                  {isApproving ? 'Approving...' : 'Approve'}
+                </Text>
               </TouchableOpacity>
             )}
             
             {/* Show Post button only for approved letters - Primary */}
             {letter.status === 'approved' && (
               <TouchableOpacity 
-                style={[styles.actionButton, styles.postButton]}
+                style={[styles.actionButton, styles.postButton, isPosting && styles.disabledButton]}
                 onPress={handlePost}
+                disabled={isPosting}
               >
-                <Ionicons name="send" size={20} color="#FFFFFF" />
-                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>Post</Text>
+                {isPosting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#FFFFFF" />
+                )}
+                <Text style={[styles.actionButtonText, styles.primaryButtonText]}>
+                  {isPosting ? 'Posting...' : 'Post'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -446,7 +480,7 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F8F9FA',
   },
   header: {
     flexDirection: 'row',
@@ -454,75 +488,79 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    minHeight: 60,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    minHeight: 72,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButton: {
     padding: 8,
-    marginRight: 8,
+    marginRight: 12,
   },
   headerCenter: {
     flex: 1,
     alignItems: 'center',
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8, // mb-2 equivalent
-  },
   headerTitle: {
-    fontSize: 18, // text-lg
-    fontWeight: '600', // font-semibold
-    color: '#111827',
-    marginRight: 8,
-  },
-  compactStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 20, // h-5 equivalent
-  },
-  compactStatusText: {
-    fontSize: 10,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  headerSubtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16, // gap-x-4 equivalent (16px = 4 * 4)
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D3748',
+    textAlign: 'center',
+    marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 12, // text-xs
-    color: '#6B7280', // text-gray-500
+    fontSize: 14,
+    color: '#6B7280',
     fontWeight: '500',
-  },
-  headerMetadataText: {
-    fontSize: 12, // text-xs
-    color: '#6B7280', // text-gray-500
-    fontWeight: '400',
-  },
-  headerMetadataSeparator: {
-    fontSize: 12, // text-xs
-    color: '#6B7280', // text-gray-500
-    marginHorizontal: 0, // gap handles spacing
+    textAlign: 'center',
   },
   menuButton: {
     padding: 8,
-    marginLeft: 8,
+    marginLeft: 12,
+  },
+  statusSection: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  statusIcon: {
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statusMetadataContainer: {
+    flex: 1,
+    marginRight: 16,
+    alignItems: 'flex-start',
+  },
+  statusMetadata: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+    textAlign: 'left',
+    lineHeight: 18,
   },
   menuBackdrop: {
     position: 'absolute',
@@ -534,14 +572,16 @@ const styles = StyleSheet.create({
   },
   overflowMenu: {
     position: 'absolute',
-    top: '100%',
-    right: 16,
+    top: 76, // Position just below the header (72px + 4px gap)
+    right: 20,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 8,
     minWidth: 160,
     zIndex: 1000,
@@ -563,19 +603,19 @@ const styles = StyleSheet.create({
     marginBottom: 80, // Space for fixed bottom bar
   },
   scrollContent: {
-    paddingHorizontal: 16, // px-4 safe padding like medical apps
-    paddingVertical: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20, // More generous padding
+    paddingVertical: 20,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   contentArea: {
-    paddingVertical: 16,
+    paddingVertical: 0,
   },
   contentTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2D3748',
+    marginBottom: 16,
   },
   noContentText: {
     fontSize: 14, // text-sm
@@ -585,9 +625,9 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   htmlContent: {
-    fontSize: 14, // text-sm
-    lineHeight: 22, // leading-relaxed
-    color: '#374151', // text-gray-700
+    fontSize: 16, // text-base
+    lineHeight: 24, // leading-relaxed
+    color: '#2D3748', // text-gray-800
   },
   // Bottom Action Bar Styles
   bottomActionBar: {
@@ -615,11 +655,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14, // Taller buttons
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 16, // Taller buttons
+    paddingHorizontal: 20,
+    borderRadius: 12, // More rounded corners
     borderWidth: 1,
-    minHeight: 48, // Consistent height
+    minHeight: 52, // Consistent height
   },
   actionButtonText: {
     fontSize: 14,
@@ -628,22 +668,17 @@ const styles = StyleSheet.create({
   },
   // Primary buttons (filled)
   approveButton: {
-    backgroundColor: '#10B981', // Green primary
-    borderColor: '#10B981',
+    backgroundColor: '#2C3E50', // Dark blue-grey primary
+    borderColor: '#2C3E50',
   },
   postButton: {
-    backgroundColor: '#3B82F6', // Blue primary
-    borderColor: '#3B82F6',
+    backgroundColor: '#2C3E50', // Dark blue-grey primary
+    borderColor: '#2C3E50',
   },
   primaryButtonText: {
     color: '#FFFFFF',
   },
-  // Secondary buttons (outlined)
-  editButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D1D5DB',
-  },
-  editButtonText: {
-    color: '#6B7280',
+  disabledButton: {
+    opacity: 0.6,
   },
 });

@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import { StorageAccessFramework } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
 export interface ClinicalLetterData {
   patientName: string;
@@ -90,7 +91,7 @@ class PDFService {
       return uri;
     } catch (error) {
       console.error('PDF generation failed:', error);
-      throw new Error('Failed to generate PDF: ' + error.message);
+      throw new Error('Failed to generate PDF: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -109,7 +110,7 @@ class PDFService {
       });
     } catch (error) {
       console.error('PDF sharing failed:', error);
-      throw new Error('Failed to share PDF: ' + error.message);
+      throw new Error('Failed to share PDF: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -150,7 +151,7 @@ class PDFService {
       return fileUri;
     } catch (error) {
       console.error('PDF save failed:', error);
-      throw new Error('Failed to save PDF: ' + error.message);
+      throw new Error('Failed to save PDF: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -172,7 +173,7 @@ class PDFService {
       });
     } catch (error) {
       console.error('PDF printing failed:', error);
-      throw new Error('Failed to print PDF: ' + error.message);
+      throw new Error('Failed to print PDF: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 }

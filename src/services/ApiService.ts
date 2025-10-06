@@ -125,6 +125,30 @@ class ApiService {
     }
   }
 
+  public async uploadPatientDocument(formData: FormData): Promise<any> {
+    const token = await this.getToken();
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
+    // For multipart/form-data, we must NOT set the Content-Type header manually.
+    // The browser or fetch client will set it automatically with the correct boundary.
+    const response = await fetch(`${BASE_URL}/patients/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${BASE_URL}${endpoint}`;
     const config: RequestInit = {
@@ -151,6 +175,12 @@ class ApiService {
 
       const data = await response.json();
       console.log(`📥 Response data:`, data);
+      
+      // Check if the response indicates failure
+      if (data.error) {
+        console.error('❌ API returned error:', data.error);
+        throw new Error(data.error);
+      }
       
       return data;
     } catch (error) {
@@ -196,7 +226,8 @@ class ApiService {
           dob: patient.dob,
           age: calculateAge(patient.dob),
           createdAt: patient.created_at || patient.createdAt,
-          updatedAt: patient.updated_at || patient.updatedAt
+          updatedAt: patient.updated_at || patient.updatedAt,
+          letterCount: patient.letter_count || 0
         }));
       }
       
@@ -214,8 +245,13 @@ class ApiService {
         body: JSON.stringify(patientData),
       });
 
+      console.log('🔍 Create patient response:', response);
+      console.log('🔍 Response success:', response.success);
+      console.log('🔍 Response patient:', response.patient);
+      
       if (response.success && response.patient) {
         const patient = response.patient;
+        console.log('✅ Patient data extracted:', patient);
         return {
           id: patient.id,
           name: patient.name,
@@ -226,7 +262,8 @@ class ApiService {
         };
       }
       
-      throw new Error(response.error || 'Failed to create patient');
+      console.error('❌ Invalid response format:', response);
+      throw new Error(response.error || 'Failed to create patient - invalid response format');
     } catch (error) {
       console.error('❌ Error creating patient:', error);
       throw error;
@@ -294,26 +331,27 @@ class ApiService {
   }
 
   // Letters
-  async getLetters(status?: string): Promise<LetterFrontend[]> {
+  async getLetters(status?: string, patientId?: number): Promise<LetterFrontend[]> {
     try {
-      const endpoint = status ? `/letters?status=${status}` : '/letters';
+      let endpoint = '/letters';
+      const params = new URLSearchParams();
+      
+      if (status) {
+        params.append('status', status);
+      }
+      if (patientId) {
+        params.append('patientId', patientId.toString());
+      }
+      
+      if (params.toString()) {
+        endpoint += `?${params.toString()}`;
+      }
+      
       const response = await this.request(endpoint);
       
       if (response.success && response.letters) {
-        console.log('🔍 Raw letters from backend:', response.letters);
-        console.log('🔍 First letter sample:', response.letters[0]);
-        
         return response.letters.map((letter: any) => {
           const workflowInfo = getWorkflowStep(letter.status);
-          
-          // Debug: Log the raw letter data
-          console.log('🔍 Processing letter:', {
-            id: letter.id,
-            patientName: letter.patientName,
-            patient_name: letter.patient_name,
-            patient: letter.patient,
-            status: letter.status
-          });
           
           // Try to extract patient name from various possible sources
           let patientName = letter.patientName || 
@@ -324,8 +362,6 @@ class ApiService {
                              `${letter.patient.firstName} ${letter.patient.lastName}` : null) ||
                            'Unknown Patient';
           
-          console.log('🔍 Extracted patient name:', patientName);
-          
           return {
             id: letter.id,
             doctorId: letter.doctor_id || letter.doctorId,
@@ -335,6 +371,7 @@ class ApiService {
             status: letter.status,
             type: letter.type,
             content: letter.content,
+            rawTranscription: letter.raw_transcription || letter.rawTranscription,
             createdAt: letter.created_at || letter.createdAt,
             updatedAt: letter.updated_at || letter.updatedAt,
             workflowStep: workflowInfo.step,
@@ -346,6 +383,16 @@ class ApiService {
       return [];
     } catch (error) {
       console.error('❌ Error fetching letters:', error);
+      throw error;
+    }
+  }
+
+  // Get letters for a specific patient
+  async getPatientLetters(patientId: number): Promise<LetterFrontend[]> {
+    try {
+      return await this.getLetters(undefined, patientId);
+    } catch (error) {
+      console.error('❌ Error fetching patient letters:', error);
       throw error;
     }
   }
@@ -474,6 +521,7 @@ class ApiService {
       
       if (response.success && response.user) {
         const user = response.user;
+        
         // Convert snake_case to camelCase for consistent handling
         const camelCaseUser = toCamelCase(user);
         
@@ -529,6 +577,26 @@ class ApiService {
       throw new Error(response.error || 'Failed to update profile');
     } catch (error) {
       console.error('❌ Error updating user profile:', error);
+      throw error;
+    }
+  }
+
+  // Update letter content with raw transcription
+  async updateLetterContent(letterId: number, content: string, rawTranscription?: string): Promise<void> {
+    try {
+      const response = await this.request(`/letters/${letterId}/content`, {
+        method: 'PATCH',
+        body: JSON.stringify({ 
+          content,
+          rawTranscription: rawTranscription || ''
+        }),
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update letter content');
+      }
+    } catch (error) {
+      console.error('❌ Error updating letter content:', error);
       throw error;
     }
   }

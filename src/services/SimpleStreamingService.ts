@@ -122,11 +122,12 @@ class SimpleStreamingService {
   /**
    * Save letter to backend
    */
-  private async saveLetterToBackend(content: string, patientInfo: any, letterType: string): Promise<void> {
+  private async saveLetterToBackend(content: string, patientInfo: any, letterType: string, rawTranscription?: string): Promise<void> {
     try {
       const letterData = {
         patientId: typeof patientInfo.id === 'string' ? parseInt(patientInfo.id, 10) : patientInfo.id,
-        content: content,
+        content: content, // AI-generated content
+        rawTranscription: rawTranscription || '', // Original transcription
         type: letterType,
         priority: 'medium' as const,
         notes: '',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,28 +16,42 @@ import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/ApiService';
 import { PatientFrontend } from '../../types';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AppStackParamList } from '../../navigation/AppStackNavigator';
+import { MainTabParamList } from '../../navigation/MainTabNavigator';
+import { PatientListSkeleton } from '../../components/PatientListSkeleton';
+import { PatientListItem } from '../../components/PatientListItem';
+import { LoadingSpinner, EmptyState, ErrorState, SearchEmptyState } from '../../components/LoadingStates';
+import PatientStateService from '../../services/PatientStateService';
+import * as Haptics from 'expo-haptics';
 
-type PatientListScreenNavigationProp = StackNavigationProp<AppStackParamList>;
+type PatientListScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Home'>,
+  StackNavigationProp<AppStackParamList>
+>;
 
 export const PatientListScreen = () => {
   const navigation = useNavigation<PatientListScreenNavigationProp>();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [patients, setPatients] = useState<PatientFrontend[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<PatientFrontend[]>([]);
-  const [patientLetters, setPatientLetters] = useState<{[key: string]: any[]}>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
+  const [isRefreshingFromNavigation, setIsRefreshingFromNavigation] = useState(false);
+  const lastFetchTimeRef = useRef<number>(0);
+  
 
   // Fetch patients from API
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async () => {
     try {
-      console.log('🔍 Starting to fetch patients...');
       console.log('🔑 Auth state:', { isAuthenticated, authLoading, userId: user?.id });
       
       if (!isAuthenticated) {
@@ -46,27 +60,41 @@ export const PatientListScreen = () => {
       }
       
       setLoading(true);
-      const fetchedPatients = await ApiService.getPatients();
-      console.log('✅ Patients fetched successfully:', fetchedPatients.length);
-      setPatients(fetchedPatients);
-      setFilteredPatients(fetchedPatients);
       setError(null);
       
-      // Fetch letters for all patients to determine completion status
-      await fetchPatientLetters(fetchedPatients);
+      const fetchedPatients = await ApiService.getPatients();
+      console.log('✅ Patients fetched successfully:', fetchedPatients.length);
+      
+      // Show patients immediately with letter counts
+      setPatients(fetchedPatients);
+      
+      // Filter patients based on current tab using letter counts from API
+      const filteredByTab = fetchedPatients.filter(patient => {
+        if (activeTab === 'completed') {
+          return (patient.letterCount || 0) > 0;
+        } else {
+          return (patient.letterCount || 0) === 0;
+        }
+      });
+      
+      setFilteredPatients(filteredByTab);
+      setHasInitialLoad(true);
+      lastFetchTimeRef.current = Date.now();
+      setLoading(false);
     } catch (err) {
       console.error('❌ Failed to fetch patients:', err);
       setError('Failed to load patients');
       setPatients([]);
       setFilteredPatients([]);
-    } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, activeTab]);
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
     if (isAuthenticated) {
+      // Haptic feedback for refresh (fire and forget)
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setRefreshing(true);
       try {
         await fetchPatients();
@@ -76,186 +104,145 @@ export const PatientListScreen = () => {
     }
   }, [isAuthenticated]);
 
-  // Fetch letters for all patients efficiently
-  const fetchPatientLetters = async (patientList: PatientFrontend[]) => {
-    try {
-      console.log('📝 Starting to fetch patient letters...');
-      console.log('👥 Number of patients:', patientList.length);
-      console.log('🔑 Auth state in fetchPatientLetters:', { isAuthenticated, authLoading, userId: user?.id });
-      
-      if (!isAuthenticated) {
-        console.log('❌ Not authenticated, skipping letter fetch');
-        return;
-      }
-      
-      const lettersMap: {[key: string]: any[]} = {};
-      
-      // Fetch all letters and organize by patient ID
-      try {
-        console.log('📤 Calling ApiService.getLetters()...');
-        const allLetters = await ApiService.getLetters();
-        console.log('📥 Letters response received:', allLetters);
-        console.log('📊 Number of letters:', allLetters.length);
-        
-        // Group letters by patient ID
-        allLetters.forEach(letter => {
-          const patientId = letter.patientId.toString();
-          if (!lettersMap[patientId]) {
-            lettersMap[patientId] = [];
-          }
-          lettersMap[patientId].push(letter);
-          console.log(`📋 Letter ${letter.id} assigned to patient ${patientId}`);
-        });
-        
-        // Initialize empty arrays for patients with no letters
-        patientList.forEach(patient => {
-          if (!lettersMap[patient.id.toString()]) {
-            lettersMap[patient.id.toString()] = [];
-            console.log(`👤 Patient ${patient.id} (${patient.name}) has no letters`);
-          } else {
-            const letterCount = lettersMap[patient.id.toString()].length;
-            console.log(`👤 Patient ${patient.id} (${patient.name}) has ${letterCount} letters`);
-          }
-        });
-        
-      } catch (err) {
-        console.error('❌ Error fetching letters:', err);
-        console.log('🔄 Initializing empty state for all patients');
-        // Initialize empty arrays for all patients
-        patientList.forEach(patient => {
-          lettersMap[patient.id.toString()] = [];
-        });
-      }
-      
-      console.log('📊 Final letters map:', lettersMap);
-      setPatientLetters(lettersMap);
-      console.log('✅ Patient letters state updated');
-      
-    } catch (err) {
-      console.error('❌ Failed to fetch patient letters:', err);
-    }
-  };
 
   useEffect(() => {
     // Only fetch patients when authentication is complete and user is authenticated
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !hasInitialLoad) {
       console.log('🚀 Auth complete, fetching patients...');
       fetchPatients();
     } else if (!authLoading && !isAuthenticated) {
       console.log('❌ Auth failed, not fetching patients');
       setLoading(false);
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, hasInitialLoad, fetchPatients]);
 
-  // Refresh data when screen comes into focus (e.g., after creating a patient or generating a letter)
+  // Refresh data when screen comes into focus (only after initial load)
   useFocusEffect(
     useCallback(() => {
-      if (isAuthenticated) {
-        console.log('🔄 Screen focused, refreshing patients and letters...');
-        // Refresh both patients and letters to ensure new patients appear
-        fetchPatients();
+      if (isAuthenticated && hasInitialLoad) {
+        // Only fetch if PatientStateService indicates we need refresh or data is stale
+        const needsRefreshFromService = PatientStateService.shouldRefreshList();
+        const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
+        const isStale = timeSinceLastFetch > 5 * 60 * 1000; // 5 minutes
+        
+        if (needsRefreshFromService || isStale) {
+          setIsRefreshingFromNavigation(true);
+          fetchPatients().finally(() => {
+            setIsRefreshingFromNavigation(false);
+            PatientStateService.clearRefreshFlag();
+          });
+        }
       }
-    }, [isAuthenticated])
+    }, [isAuthenticated, hasInitialLoad, fetchPatients])
   );
 
-  // Sort and filter patients
-  useEffect(() => {
-    let processedPatients = [...patients];
+  // Sort and filter patients with memoization
+  const processedPatients = useMemo(() => {
+    let filtered = [...patients];
     
-    // Apply tab filter (pending vs completed) based on letter status
+    // Apply tab filter (pending vs completed) based on letter count
     if (activeTab === 'completed') {
       // Show patients who have generated letters
-      processedPatients = processedPatients.filter(patient => {
-        const patientLettersList = patientLetters[patient.id.toString()] || [];
-        return patientLettersList.length > 0;
-      });
+      filtered = filtered.filter(patient => (patient.letterCount || 0) > 0);
     } else {
       // Show patients who have NO letters (pending)
-      processedPatients = processedPatients.filter(patient => {
-        const patientLettersList = patientLetters[patient.id.toString()] || [];
-        return patientLettersList.length === 0;
-      });
+      filtered = filtered.filter(patient => (patient.letterCount || 0) === 0);
     }
     
     // Apply search filter
     if (searchQuery.trim() !== '') {
-      processedPatients = processedPatients.filter(patient =>
+      filtered = filtered.filter(patient =>
         patient.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     
     // Apply sorting (alphabetically ascending)
-    processedPatients.sort((a, b) => {
+    filtered.sort((a, b) => {
       const nameA = a.name.toLowerCase();
       const nameB = b.name.toLowerCase();
       return nameA.localeCompare(nameB);
     });
     
+    return filtered;
+  }, [searchQuery, patients, activeTab]);
+
+  // Update filtered patients when processedPatients changes
+  useEffect(() => {
     setFilteredPatients(processedPatients);
-  }, [searchQuery, patients, activeTab, patientLetters]);
+  }, [processedPatients]);
+
+  // Handle tab change - immediately show appropriate patients
+  const handleTabChange = useCallback((tab: 'pending' | 'completed') => {
+    // Haptic feedback for tab change (fire and forget)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveTab(tab);
+  }, []);
+
+  // Optimistically update patient letter count when a letter is created
+  const updatePatientLetterCount = useCallback((patientId: number, increment: number) => {
+    setPatients(prev => prev.map(patient => 
+      patient.id === patientId 
+        ? { ...patient, letterCount: (patient.letterCount || 0) + increment }
+        : patient
+    ));
+  }, []);
 
 
 
-  const renderPatientListItem = ({ item, index }: { item: PatientFrontend; index: number }) => {
-    // Generate initials from name
-    const initials = item.name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
 
+  // Memoized callback for letter creation
+  const createLetterCreatedCallback = useCallback((patientId: number) => {
+    return () => {
+      // Haptic feedback for letter creation (fire and forget)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Optimistically update the letter count
+      updatePatientLetterCount(patientId, 1);
+      // Mark that we need a refresh to get accurate data
+      PatientStateService.markPatientUpdated(patientId.toString());
+    };
+  }, [updatePatientLetterCount]);
+
+  // Memoized navigation handler
+  const handlePatientPress = useCallback((patient: PatientFrontend) => {
+    // Haptic feedback for patient selection (fire and forget)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('PatientDetail', { 
+      patientId: patient.id, 
+      patient,
+      onLetterCreated: createLetterCreatedCallback(patient.id)
+    });
+  }, [navigation, createLetterCreatedCallback]);
+
+  // Memoized render function for better performance
+  const renderPatientListItem = useCallback(({ item, index }: { item: PatientFrontend; index: number }) => {
     // Check if we should show a section header
     const showSectionHeader = index === 0 || 
       (index > 0 && filteredPatients[index - 1].name.charAt(0).toUpperCase() !== item.name.charAt(0).toUpperCase());
 
-    // Get letter status for this patient
-    const patientLettersList = patientLetters[item.id.toString()] || [];
-    const hasLetters = patientLettersList.length > 0;
+    // Get letter status for this patient using letterCount from API
+    const hasLetters = (item.letterCount || 0) > 0;
 
     return (
-      <>
-        {showSectionHeader && (
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionHeaderText}>{item.name.charAt(0).toUpperCase()}</Text>
-          </View>
-        )}
-        <TouchableOpacity 
-          testID={`patient-item-${index}`}
-          style={styles.patientListItem}
-          onPress={() => {
-            console.log('🔍 Navigating to PatientDetail with:', { patientId: item.id, patient: item });
-            navigation.navigate('PatientDetail', { patientId: item.id, patient: item });
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.listItemContent}>
-            <View style={styles.listAvatar}>
-              <Text style={styles.listAvatarText}>{initials}</Text>
-            </View>
-            
-            <View style={styles.listInfoSection}>
-              <Text style={styles.listPatientName} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.listMRNumber}>MR #{item.id}</Text>
-            </View>
-            
-            <View style={styles.listStatusSection}>
-              {/* Simple green tick for patients with letters */}
-              {hasLetters && (
-                <View testID="completed-patient-checkmark" style={styles.greenTick}>
-                  <Ionicons name="checkmark" size={20} color="#10B981" />
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.listArrowSection}>
-              <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
-            </View>
-          </View>
-        </TouchableOpacity>
-      </>
+      <PatientListItem
+        patient={item}
+        index={index}
+        hasLetters={hasLetters}
+        showSectionHeader={showSectionHeader}
+        onPress={handlePatientPress}
+      />
     );
-  };
+  }, [filteredPatients, handlePatientPress]);
+
+  // Memoized key extractor
+  const keyExtractor = useCallback((item: PatientFrontend) => item.id.toString(), []);
+
+  // Memoized getItemLayout for better FlatList performance
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 80, // Approximate item height
+    offset: 80 * index,
+    index,
+  }), []);
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -264,12 +251,7 @@ export const PatientListScreen = () => {
         <View>
           <Text style={styles.welcomeText}>Welcome</Text>
           <Text style={styles.doctorName}>
-            {user ? 
-              (user.firstName && user.lastName ? 
-                `Dr. ${user.firstName} ${user.lastName}` : 
-                user.fullName ? `Dr. ${user.fullName}` : 'Dr. User') : 
-              'Doctor'
-            }
+            {user?.fullName || user?.email?.split('@')[0] || 'User'}
           </Text>
         </View>
         <View style={styles.headerControls}>
@@ -289,7 +271,7 @@ export const PatientListScreen = () => {
           {/* Add Patient Button */}
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={() => navigation.navigate('AddPatientOptions')}
+            onPress={() => (navigation as any).navigate('AddPatient')}
           >
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -311,33 +293,27 @@ export const PatientListScreen = () => {
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-          onPress={() => setActiveTab('pending')}
+          onPress={() => handleTabChange('pending')}
         >
           <View style={styles.tabContent}>
             <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
               Pending
             </Text>
             <Text style={[styles.tabCountText, activeTab === 'pending' && styles.activeTabCountText]}>
-              ({patients.filter(patient => {
-                const patientLettersList = patientLetters[patient.id.toString()] || [];
-                return patientLettersList.length === 0;
-              }).length})
+              ({patients.filter(patient => (patient.letterCount || 0) === 0).length})
             </Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
+          onPress={() => handleTabChange('completed')}
         >
           <View style={styles.tabContent}>
             <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
               Completed
             </Text>
             <Text style={[styles.tabCountText, activeTab === 'completed' && styles.activeTabCountText]}>
-              ({patients.filter(patient => {
-                const patientLettersList = patientLetters[patient.id.toString()] || [];
-                return patientLettersList.length > 0;
-              }).length})
+              ({patients.filter(patient => (patient.letterCount || 0) > 0).length})
             </Text>
           </View>
         </TouchableOpacity>
@@ -345,67 +321,76 @@ export const PatientListScreen = () => {
 
 
 
-      {/* Loading State */}
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000000" />
-          <Text style={styles.loadingText}>Loading patients...</Text>
-        </View>
-      )}
+      {/* Loading State - Show skeleton for initial load or navigation refresh */}
+      {(loading && !hasInitialLoad) || (isRefreshingFromNavigation && hasInitialLoad) ? (
+        <PatientListSkeleton />
+      ) : null}
 
       {/* Error State */}
       {error && !loading && (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => {
-              setError(null);
-              // Refetch patients
-              fetchPatients();
-            }}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+        <ErrorState 
+          message={error}
+          onRetry={() => {
+            setError(null);
+            fetchPatients();
+          }}
+        />
       )}
 
       {/* Patient List */}
-      {!loading && !error && (
+      {!loading && !error && hasInitialLoad && !isRefreshingFromNavigation && (
         <>
-          {activeTab === 'completed' && filteredPatients.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons name="checkmark-circle-outline" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyStateTitle}>No Completed Patients</Text>
-              <Text style={styles.emptyStateText}>
-                Patients will appear here once you generate letters for them{'\n'}
-                Pull down to refresh or use the refresh button above
-              </Text>
-            </View>
-          ) : activeTab === 'pending' && filteredPatients.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons name="people-outline" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyStateTitle}>No Pending Patients</Text>
-              <Text style={styles.emptyStateText}>
-                All patients have been completed! 🎉{'\n'}
-                Great job on your rounds today{'\n'}
-                Pull down to refresh or use the refresh button above
-              </Text>
-            </View>
-          ) : (
+          {/* Search Empty State */}
+          {searchQuery.trim() !== '' && filteredPatients.length === 0 && (
+            <SearchEmptyState 
+              query={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+            />
+          )}
+
+          {/* Tab Empty States */}
+          {searchQuery.trim() === '' && activeTab === 'completed' && filteredPatients.length === 0 && (
+            <EmptyState
+              icon="checkmark-circle-outline"
+              title="No Completed Patients"
+              message="Patients will appear here once you generate letters for them"
+              actionText="Pull down to refresh"
+              onAction={onRefresh}
+            />
+          )}
+
+          {searchQuery.trim() === '' && activeTab === 'pending' && filteredPatients.length === 0 && (
+            <EmptyState
+              icon="people-outline"
+              title="No Pending Patients"
+              message="All patients have been completed! 🎉\nGreat job on your rounds today"
+              actionText="Pull down to refresh"
+              onAction={onRefresh}
+            />
+          )}
+
+          {/* Patient List */}
+          {filteredPatients.length > 0 && (
             <FlatList
               testID="patient-list"
               data={filteredPatients}
               renderItem={renderPatientListItem}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={keyExtractor}
+              getItemLayout={getItemLayout}
               style={styles.patientList}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listViewContent}
-              refreshing={refreshing}
+              refreshing={refreshing || isRefreshingFromNavigation}
               onRefresh={onRefresh}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              initialNumToRender={20}
+              updateCellsBatchingPeriod={50}
             />
           )}
+
+
         </>
       )}
     </SafeAreaView>
@@ -426,6 +411,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F2F5',
+    overflow: 'hidden',
   },
   headerControls: {
     flexDirection: 'row',
@@ -497,11 +483,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: 'transparent',
     borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
   tabContent: {
     flexDirection: 'row',
@@ -509,8 +496,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activeTab: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   tabText: {
     fontSize: 16,
@@ -518,8 +514,8 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   activeTabText: {
-    color: '#000000',
-    fontWeight: '600',
+    color: '#111827',
+    fontWeight: '700',
   },
   tabCountText: {
     fontSize: 14,
@@ -527,7 +523,7 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   activeTabCountText: {
-    color: '#6B7280',
+    color: '#374151',
     fontWeight: '600',
   },
   emptyStateContainer: {
@@ -634,6 +630,21 @@ const styles = StyleSheet.create({
   listViewContent: {
     paddingHorizontal: 0,
     paddingBottom: 20,
+  },
+  lettersLoadingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  lettersLoadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#64748B',
   },
   sectionHeader: {
     backgroundColor: '#F8FAFC',

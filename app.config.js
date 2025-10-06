@@ -16,7 +16,7 @@ module.exports = {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.anonymous.MedWave",
+      bundleIdentifier: "com.riztech.medwave",
       icon: "./assets/icon.png",
       buildNumber: "1"
     },
@@ -25,7 +25,7 @@ module.exports = {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.anonymous.MedWave",
+      package: "com.riztech.medwave",
       versionCode: 1
     },
     web: {

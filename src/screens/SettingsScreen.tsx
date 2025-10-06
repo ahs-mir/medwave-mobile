@@ -32,7 +32,7 @@ const SettingsScreen = () => {
         setApiKey(storedKey);
       }
     } catch (error) {
-      console.error('Error loading API key:', error);
+      // Silent error handling
     }
   };
 
@@ -84,22 +84,14 @@ const SettingsScreen = () => {
       onPress: () => setShowProfileModal(true),
     },
     {
-      icon: 'notifications-outline',
-      title: 'Notifications',
-      description: 'Configure notification preferences',
-      onPress: () => Alert.alert('Coming Soon', 'Notification settings will be available soon'),
-    },
-    {
-      icon: 'shield-outline',
-      title: 'Privacy & Security',
-      description: 'Manage your privacy settings',
-      onPress: () => Alert.alert('Coming Soon', 'Privacy settings will be available soon'),
-    },
-    {
-      icon: 'help-circle-outline',
-      title: 'Help & Support',
-      description: 'Get help and contact support',
-      onPress: () => Alert.alert('Coming Soon', 'Help & Support will be available soon'),
+      icon: 'document-text-outline',
+      title: 'Privacy Policy',
+      description: 'View our privacy policy',
+      onPress: () => Alert.alert(
+        'Privacy Policy',
+        'MedWave is committed to protecting your privacy and the security of patient data. All medical information is encrypted and stored securely. We do not share patient data with third parties without explicit consent.',
+        [{ text: 'OK' }]
+      ),
     },
   ];
 

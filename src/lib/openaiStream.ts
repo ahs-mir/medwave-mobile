@@ -220,7 +220,7 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
       };
 
       xhr.onloadend = () => {
-        if (!isActive) return;
+        if (!isActive || !xhr) return;
 
         // Process any remaining data in buffer
         if (buffer.trim()) {
@@ -249,7 +249,7 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
       };
 
       xhr.onerror = () => {
-        if (!isActive) return;
+        if (!isActive || !xhr) return;
         
         console.error('❌ streamOpenAI: XMLHttpRequest error');
         if (onError) onError('Network error occurred');
@@ -257,7 +257,9 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
       };
 
       xhr.onreadystatechange = () => {
-        if (xhr && xhr.readyState === 4) {
+        if (!isActive || !xhr) return;
+        
+        if (xhr.readyState === 4) {
           if (xhr.status !== 200) {
             console.error(`❌ streamOpenAI: HTTP ${xhr.status}: ${xhr.statusText}`);
             if (onError) onError(`HTTP ${xhr.status}: ${xhr.statusText}`);

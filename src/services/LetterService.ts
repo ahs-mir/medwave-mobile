@@ -160,7 +160,8 @@ class LetterService {
       const letterData: CreateLetterRequest = {
         patientId: typeof patientInfo.id === 'string' ? parseInt(patientInfo.id, 10) : patientInfo.id,
         type: letterType,
-        content: bodyOnly,
+        content: bodyOnly, // AI-generated content goes to content field
+        rawTranscription: transcription, // Original transcription goes to rawTranscription field
         priority,
         notes: notes || '',
         status: 'draft'

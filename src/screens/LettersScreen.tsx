@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,15 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import LetterService from '../services/LetterService';
 import ApiService from '../services/ApiService';
 import { LetterFrontend } from '../types';
 import { AppStackParamList } from '../navigation/AppStackNavigator';
+import { LettersListSkeleton } from '../components/LettersListSkeleton';
+import * as Haptics from 'expo-haptics';
 
 export const LettersScreen = () => {
   const navigation = useNavigation<StackNavigationProp<AppStackParamList>>();
@@ -125,20 +127,8 @@ export const LettersScreen = () => {
       console.log('👨‍⚕️ Fetching letters for doctor ID:', user.doctorId);
       
       try {
-        console.log('🔍 Attempting to fetch letters using ApiService...');
-        
         // Use ApiService instead of direct fetch
         const fetchedLetters = await ApiService.getLetters();
-        console.log('📥 Letters from ApiService:', fetchedLetters);
-        console.log('✅ Fetched letters successfully:', fetchedLetters.length);
-        
-        if (fetchedLetters.length > 0) {
-          console.log('📄 Sample letter data:', fetchedLetters[0]);
-          console.log('🔍 Letter field names:', Object.keys(fetchedLetters[0]));
-          console.log('🔍 patientName value:', fetchedLetters[0].patientName);
-        } else {
-          console.log('📭 No letters found for this doctor');
-        }
         
         setLetters(fetchedLetters);
         setError(null);
@@ -194,21 +184,19 @@ export const LettersScreen = () => {
     }
   }, [isAuthenticated, user]);
 
-  // Debug: Log the first letter to see the data structure
-  useEffect(() => {
-    if (letters.length > 0) {
-      console.log('🔍 FIRST LETTER DATA STRUCTURE:', {
-        id: letters[0].id,
-        patientName: letters[0].patientName,
-        patient_name: (letters[0] as any).patient_name,
-        patientname: (letters[0] as any).patientname,
-        status: letters[0].status,
-        type: letters[0].type
-      });
-    }
-  }, [letters]);
+  // Refresh letters when screen comes into focus (e.g., after deleting a letter)
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated && user) {
+        console.log('🔄 Screen focused - refreshing letters list');
+        fetchLetters();
+      }
+    }, [isAuthenticated, user])
+  );
 
   const onRefresh = () => {
+    // Haptic feedback for refresh
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRefreshing(true);
     fetchLetters();
   };
@@ -307,21 +295,6 @@ export const LettersScreen = () => {
       return null;
     }
 
-    // Debug: Log the actual letter data structure
-    console.log('🔍 Letter item data:', {
-      id: item.id,
-      patientName: item.patientName,
-      patient_name: item.patient_name,
-      patientname: item.patientname,
-      patient: item.patient,
-      patientId: item.patientId,
-      patient_id: item.patient_id,
-      patientid: item.patientid,
-      status: item.status,
-      type: item.type,
-      // Log all keys to see what's actually available
-      allKeys: Object.keys(item)
-    });
 
     // Try multiple possible field names for patient name
     let patientName = item.patientName || 
@@ -342,12 +315,13 @@ export const LettersScreen = () => {
       patientName = `Patient #${patientId}`;
     }
 
-    console.log('🔍 Final patient name:', patientName);
 
     return (
       <TouchableOpacity 
         style={styles.letterListItem}
         onPress={() => {
+          // Haptic feedback for letter selection
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           // Navigate to LetterDetail screen
           navigation.navigate('LetterDetail', {
             letter: item,
@@ -387,17 +361,7 @@ export const LettersScreen = () => {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Letters</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0F172A" />
-          <Text style={styles.loadingText}>Loading letters...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <LettersListSkeleton />;
   }
 
   if (error) {
@@ -445,7 +409,10 @@ export const LettersScreen = () => {
                       styles.filterChip,
                       selectedFilter === filter.key && styles.filterChipActive
                     ]}
-                    onPress={() => setSelectedFilter(filter.key as any)}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSelectedFilter(filter.key as any);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={[
@@ -527,7 +494,10 @@ export const LettersScreen = () => {
                 styles.filterChip,
                 selectedFilter === filter.key && styles.filterChipActive
               ]}
-              onPress={() => setSelectedFilter(filter.key as any)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSelectedFilter(filter.key as any);
+              }}
               activeOpacity={0.7}
             >
               <Text style={[

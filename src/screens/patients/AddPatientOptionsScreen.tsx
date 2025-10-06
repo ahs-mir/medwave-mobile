@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,666 +7,186 @@ import {
   StyleSheet,
   Alert,
   StatusBar,
-  TextInput,
-  ScrollView,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import ApiService from '../../services/ApiService';
+import * as Device from 'expo-device';
 import OCRService from '../../services/OCRService';
-import { useAuth } from '../../context/AuthContext';
-import { TRANSCRIPTION_PROMPTS } from '../../config/aiPrompts';
 
-interface Props {
-  navigation: any;
-  route: any;
-}
-
-interface NewPatient {
+interface ScannedData {
   name: string;
-  dateOfBirth: string;
+  firstName: string;
+  lastName: string;
+  dob: string;
   medicalNumber: string;
 }
 
+interface Props {
+  navigation: any;
+}
+
 export const AddPatientOptionsScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, isAuthenticated } = useAuth();
   const [isScanning, setIsScanning] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [scannedData, setScannedData] = useState<ScannedData | null>(null);
 
-  const [patient, setPatient] = useState<NewPatient>({
-    name: '',
-    dateOfBirth: '',
-    medicalNumber: '',
-  });
-
-  const generateMedicalNumber = (): string => {
-    const timestamp = Date.now().toString().slice(-6);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `MRN-${timestamp}${random}`;
-  };
-
-  useEffect(() => {
-    if (!patient.medicalNumber) {
-      setPatient(prev => ({
-        ...prev,
-        medicalNumber: generateMedicalNumber(),
-      }));
+  const handleScanPress = () => {
+    if (!Device.isDevice) {
+      chooseFromGallery();
+      return;
     }
-  }, [patient.medicalNumber]);
-
-  const handleScanDocument = async () => {
-    try {
-      setIsScanning(true);
-      
-      // Request camera permission
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (permissionResult.status !== 'granted') {
-        Alert.alert('Permission Required', 'Camera permission is needed to scan documents.');
-        return;
-      }
-
-      // Show image picker options
-      Alert.alert(
-        'Scan Document',
-        'Choose how to scan the document',
-        [
-          {
-            text: 'Take Photo',
-            onPress: () => takePhoto(),
-          },
-          {
-            text: 'Choose from Gallery',
-            onPress: () => pickImage(),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Scan error:', error);
-      Alert.alert('Error', 'Failed to start scanning. Please try again.');
-    } finally {
-      setIsScanning(false);
-    }
+    Alert.alert("Scan Document", "Choose an option", [
+      { text: "Take Photo", onPress: takePhoto },
+      { text: "Choose from Library", onPress: chooseFromGallery },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        await processScannedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    // On simulator, launch library instead of camera
+    if (!Device.isDevice) {
+      chooseFromGallery();
+      return;
     }
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission Required", "Camera access is needed.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.5 });
+    if (!result.canceled) processScannedImage(result.assets[0].uri);
   };
 
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        await processScannedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Gallery error:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
-    }
+  const chooseFromGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.5 });
+    if (!result.canceled) processScannedImage(result.assets[0].uri);
   };
 
-  const processScannedImage = async (imageUri: string) => {
+  const processScannedImage = async (uri: string) => {
+    setIsScanning(true);
     try {
-      setIsScanning(true);
-      
-      // Process with OCR
-      const ocrResult = await OCRService.extractPatientDataFromFile(imageUri);
-      
-      if (ocrResult.success && ocrResult.data) {
-        // Try to extract patient information from OCR result
-        const extractedData = ocrResult.data;
-        
-        if (extractedData) {
-          setPatient(prev => ({
-            ...prev,
-            ...extractedData,
-          }));
-          Alert.alert('Success', 'Patient information extracted from document!');
-        } else {
-          Alert.alert('Info', 'Document scanned but could not extract patient information. Please fill in manually.');
-        }
+      const result = await OCRService.extractPatientDataFromFile(uri);
+      if (result.success && result.data) {
+        setScannedData({
+          name: result.data.name || '',
+          firstName: result.data.firstName || '',
+          lastName: result.data.lastName || '',
+          dob: result.data.dateOfBirth || '',
+          medicalNumber: result.data.medicalNumber || '',
+        });
+        setModalVisible(true);
       } else {
-        Alert.alert('Info', 'Document scanned but no text was found. Please fill in manually.');
+        Alert.alert('Extraction Failed', result.error || 'Could not extract data.');
       }
     } catch (error) {
-      console.error('OCR processing error:', error);
-      Alert.alert('Error', 'Failed to process document. Please fill in manually.');
+      Alert.alert('Error', `Scan failed: ${error instanceof Error ? error.message : 'An unknown error occurred'}`);
     } finally {
       setIsScanning(false);
     }
   };
 
-  const extractPatientInfo = async (text: string) => {
-    try {
-      // Use GPT to extract patient information
-      const prompt = TRANSCRIPTION_PROMPTS.ocr.replace('{{text}}', text);
-      
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 200,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const content = data.choices[0]?.message?.content;
-        if (content) {
-          try {
-            return JSON.parse(content);
-          } catch (e) {
-            console.log('Failed to parse GPT response:', content);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('GPT extraction error:', error);
+  const handleConfirmScannedData = () => {
+    setModalVisible(false);
+    if (scannedData) {
+      navigation.navigate('AddPatient', { scannedData });
     }
-    return null;
+    setScannedData(null);
   };
 
-  const validateForm = (): boolean => {
-    if (!patient.name.trim()) {
-      Alert.alert('Validation Error', 'Please enter patient name.');
-      return false;
-    }
-    if (!patient.dateOfBirth.trim()) {
-      Alert.alert('Validation Error', 'Please enter date of birth.');
-      return false;
-    }
-    if (!patient.medicalNumber.trim()) {
-      Alert.alert('Validation Error', 'Please enter medical record number.');
-      return false;
-    }
-    
-    // Validate date format
-    if (patient.dateOfBirth.includes('/')) {
-      const dateParts = patient.dateOfBirth.split('/');
-      if (dateParts.length !== 3) {
-        Alert.alert('Validation Error', 'Date must be in DD/MM/YYYY format (e.g., 15/05/1990)');
-        return false;
-      }
-      
-      const [day, month, year] = dateParts;
-      const dayNum = parseInt(day, 10);
-      const monthNum = parseInt(month, 10);
-      const yearNum = parseInt(year, 10);
-      
-      if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
-        Alert.alert('Validation Error', 'Date must contain valid numbers');
-        return false;
-      }
-      
-      if (dayNum < 1 || dayNum > 31) {
-        Alert.alert('Validation Error', 'Day must be between 1 and 31');
-        return false;
-      }
-      
-      if (monthNum < 1 || monthNum > 12) {
-        Alert.alert('Validation Error', 'Month must be between 1 and 12');
-        return false;
-      }
-      
-      if (yearNum < 1900 || yearNum > new Date().getFullYear()) {
-        Alert.alert('Validation Error', 'Year must be between 1900 and current year');
-        return false;
-      }
-    }
-    
-    return true;
+  const handleRetake = () => {
+    setModalVisible(false);
+    setScannedData(null);
+    handleScanPress();
   };
-
-  const handleSave = async () => {
-    if (!validateForm()) return;
-
-    try {
-      setIsSaving(true);
-
-      // Convert DD/MM/YYYY to ISO8601 format with validation
-      let isoDate = patient.dateOfBirth;
-      if (patient.dateOfBirth && patient.dateOfBirth.includes('/')) {
-        const dateParts = patient.dateOfBirth.split('/');
-        if (dateParts.length !== 3) {
-          throw new Error('Date must be in DD/MM/YYYY format (e.g., 15/05/1990)');
-        }
-        
-        const [day, month, year] = dateParts;
-        const dayNum = parseInt(day, 10);
-        const monthNum = parseInt(month, 10);
-        const yearNum = parseInt(year, 10);
-        
-        // Validate date components
-        if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
-          throw new Error('Date must contain valid numbers');
-        }
-        
-        if (dayNum < 1 || dayNum > 31) {
-          throw new Error('Day must be between 1 and 31');
-        }
-        
-        if (monthNum < 1 || monthNum > 12) {
-          throw new Error('Month must be between 1 and 12');
-        }
-        
-        if (yearNum < 1900 || yearNum > new Date().getFullYear()) {
-          throw new Error('Year must be between 1900 and current year');
-        }
-        
-        // Create ISO date string
-        isoDate = `${yearNum}-${monthNum.toString().padStart(2, '0')}-${dayNum.toString().padStart(2, '0')}`;
-        
-        // Validate the final ISO date
-        const testDate = new Date(isoDate);
-        if (isNaN(testDate.getTime())) {
-          throw new Error('Invalid date format');
-        }
-        
-        console.log('📅 Date converted:', patient.dateOfBirth, '→', isoDate);
-      } else if (patient.dateOfBirth) {
-        // If not DD/MM/YYYY format, try to validate as ISO
-        const testDate = new Date(patient.dateOfBirth);
-        if (isNaN(testDate.getTime())) {
-          throw new Error('Invalid date format. Please use DD/MM/YYYY (e.g., 15/05/1990)');
-        }
-        isoDate = patient.dateOfBirth;
-      }
-
-      const patientData = {
-        name: patient.name.trim(),
-        dob: isoDate, // Send date of birth in ISO format
-        gender: 'Male', // Default gender - required by backend
-        phone: '+1234567890', // Default phone
-        email: 'patient@example.com', // Default email
-        address: 'Default Address', // Default address
-        medicalHistory: 'Manual entry',
-        allergies: 'None known',
-        bloodType: 'O+',
-        emergencyContact: 'Emergency Contact',
-        medicalNumber: patient.medicalNumber.trim(),
-        condition: 'Manual entry',
-        urgency: 'medium',
-        doctorId: user?.id || 'unknown'
-      };
-
-      console.log('📋 Sending patient data to backend:', patientData);
-
-      const newPatient = await ApiService.createPatient(patientData);
-
-      console.log('✅ New patient created:', newPatient);
-      
-      Alert.alert('Success', 'Patient created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
-    } catch (error) {
-      console.error('❌ Create patient error:', error);
-      Alert.alert('Error', `Failed to create patient: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleGenerateNewNumber = () => {
-    setPatient(prev => ({
-      ...prev,
-      medicalNumber: generateMedicalNumber(),
-    }));
-  };
-
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      const day = selectedDate.getDate().toString().padStart(2, '0');
-      const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
-      const year = selectedDate.getFullYear();
-      const formattedDate = `${day}/${month}/${year}`;
-      setPatient(prev => ({
-        ...prev,
-        dateOfBirth: formattedDate,
-      }));
-    }
+  
+  const formatDateFromAPI = (dateString: string | undefined): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      {/* Header */}
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={24} color="#111827" />
-          </TouchableOpacity>
-          
-          <Text style={styles.headerTitle}>
-            Add New Patient
-          </Text>
-          
-          <View style={styles.headerSpacer} />
-        </View>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color="#000" /></TouchableOpacity>
+        <Text style={styles.headerTitle}>Add Patient</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.title}>How would you like to add a new patient?</Text>
+        <TouchableOpacity style={styles.optionButton} onPress={handleScanPress} disabled={isScanning}>
+          <Ionicons name="camera-outline" size={24} color="#1F2937" />
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>Scan Document</Text>
+            <Text style={styles.optionSubtitle}>Use camera to extract patient info automatically</Text>
+          </View>
+          {isScanning ? <ActivityIndicator /> : <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.optionButton} onPress={() => navigation.navigate('AddPatient')}>
+          <Ionicons name="create-outline" size={24} color="#1F2937" />
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>Enter Manually</Text>
+            <Text style={styles.optionSubtitle}>Fill in the patient's details by hand</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+        </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Scan Option Card */}
-        <View style={styles.scanCard}>
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={handleScanDocument}
-            disabled={isScanning}
-          >
-            <View style={styles.scanIconContainer}>
-              <Ionicons 
-                name="camera" 
-                size={28} 
-                color="#FFFFFF" 
-              />
+      <Modal animationType="slide" transparent={true} visible={isModalVisible} onRequestClose={() => setModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Confirm Extracted Data</Text>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>Name:</Text>
+              <Text style={styles.dataValue}>{scannedData?.name || 'Not found'}</Text>
             </View>
-            <View style={styles.scanTextContainer}>
-              <Text style={styles.scanTitle}>
-                {isScanning ? 'Scanning...' : '📷 Scan Document'}
-              </Text>
-              <Text style={styles.scanSubtitle}>
-                Extract patient info from documents automatically
-              </Text>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>Date of Birth:</Text>
+              <Text style={styles.dataValue}>{formatDateFromAPI(scannedData?.dob) || 'Not found'}</Text>
             </View>
-            <Ionicons 
-              name="chevron-forward" 
-              size={20} 
-              color="#6B7280" 
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Form Section */}
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Patient Information</Text>
-          
-          {/* Name Field */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Full Name *</Text>
-            <TextInput
-              style={styles.textInput}
-              value={patient.name}
-              onChangeText={(text) => setPatient(prev => ({ ...prev, name: text }))}
-              placeholder="Enter patient's full name"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
-
-          {/* Date of Birth Field */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Date of Birth *</Text>
-            <TouchableOpacity
-              style={styles.textInput}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={patient.dateOfBirth ? styles.dateText : styles.placeholderText}>
-                {patient.dateOfBirth || 'Select Date'}
-              </Text>
-              <Ionicons name="calendar" size={20} color="#6B7280" style={styles.dateIcon} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Medical Record Number Field */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Medical Record Number *</Text>
-            <View style={styles.mrnContainer}>
-              <TextInput
-                style={[styles.textInput, styles.mrnInput]}
-                value={patient.medicalNumber}
-                onChangeText={(text) => setPatient(prev => ({ ...prev, medicalNumber: text }))}
-                placeholder="Enter MRN"
-                placeholderTextColor="#9CA3AF"
-              />
-              <TouchableOpacity
-                style={styles.generateButton}
-                onPress={handleGenerateNewNumber}
-              >
-                <Text style={styles.generateButtonText}>Generate</Text>
-              </TouchableOpacity>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>MRN:</Text>
+              <Text style={styles.dataValue}>{scannedData?.medicalNumber || 'Not found'}</Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.rescanButton]} onPress={handleRetake}><Text style={styles.rescanButtonText}>Re-scan</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.confirmButton]} onPress={handleConfirmScannedData}><Text style={styles.buttonText}>Confirm & Continue</Text></TouchableOpacity>
             </View>
           </View>
         </View>
-
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <Text style={styles.saveButtonText}>Creating...</Text>
-          ) : (
-            <Text style={styles.saveButtonText}>Create Patient</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={new Date(patient.dateOfBirth || new Date())}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-        />
-      )}
+      </Modal>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 40,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginLeft: 16,
-  },
-  headerSpacer: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  scanCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 20,
-    marginBottom: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  scanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  scanIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  scanTextContainer: {
-    flex: 1,
-  },
-  scanTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  scanSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  formSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  textInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  placeholderText: {
-    color: '#9CA3AF',
-    flex: 1,
-  },
-  dateText: {
-    color: '#111827',
-    flex: 1,
-  },
-  dateIcon: {
-    marginLeft: 10,
-  },
-  mrnContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  mrnInput: {
-    flex: 1,
-  },
-  generateButton: {
-    backgroundColor: '#000000',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    height: 48,
-    justifyContent: 'center',
-  },
-  generateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#000000',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  backButton: { padding: 4 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
+  content: { flex: 1, padding: 20 },
+  title: { fontSize: 22, fontWeight: '700', color: '#111827', marginBottom: 24, textAlign: 'center' },
+  optionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
+  optionTextContainer: { flex: 1, marginLeft: 16 },
+  optionTitle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+  optionSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalView: { width: '90%', backgroundColor: 'white', borderRadius: 12, padding: 24, alignItems: 'center' },
+  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 16 },
+  dataRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  dataLabel: { color: '#4B5563', fontSize: 16 },
+  dataValue: { color: '#111827', fontWeight: '600', fontSize: 16 },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 24 },
+  modalButton: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', marginHorizontal: 8 },
+  rescanButton: { backgroundColor: '#F3F4F6' },
+  rescanButtonText: { color: '#1F2937', fontWeight: '600', fontSize: 16 },
+  confirmButton: { backgroundColor: '#1F2937' },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 }); 

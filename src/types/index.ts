@@ -87,6 +87,7 @@ export interface PatientFrontend {
   age: number; // Calculated from DOB
   createdAt: string;
   updatedAt: string;
+  letterCount?: number; // Number of letters for this patient
 }
 
 export interface LetterFrontend {
@@ -98,6 +99,7 @@ export interface LetterFrontend {
   status: 'draft' | 'created' | 'approved' | 'posted';
   type?: string; // Letter type (clinical, consultation, referral, etc.)
   content: string;
+  rawTranscription?: string; // Original dictation/transcription
   createdAt: string;
   updatedAt: string;
   workflowStep: string;
@@ -152,6 +154,7 @@ export interface CreateLetterRequest {
   priority: 'low' | 'medium' | 'high';
   notes?: string;
   status: 'draft' | 'created' | 'approved' | 'posted';
+  rawTranscription?: string;
 }
 
 export interface UpdateLetterContentRequest {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Platform,
   useWindowDimensions,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
@@ -55,6 +57,13 @@ const ClinicalLetterModal: React.FC<Props> = ({
   React.useEffect(() => {
     setEditableLetter(generatedLetter);
   }, [generatedLetter]);
+
+  // Dismiss keyboard when modal opens
+  useEffect(() => {
+    if (visible) {
+      Keyboard.dismiss();
+    }
+  }, [visible]);
 
   const letterTypeOptions = [
     { value: 'consultation', label: 'Consultation' },
@@ -119,7 +128,11 @@ const ClinicalLetterModal: React.FC<Props> = ({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.container} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -255,7 +268,7 @@ const ClinicalLetterModal: React.FC<Props> = ({
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

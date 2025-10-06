@@ -19,6 +19,7 @@ export const AuthContext = createContext<AuthContextType>({
   isLoading: false,
   login: async () => ({ success: false }),
   logout: () => {},
+  updateProfile: async () => ({ success: false }),
 });
 AuthContext.displayName = 'AuthContext';
 
@@ -37,19 +38,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           const user = await ApiService.getCurrentUser();
           if (user) {
-            console.log('🔑 Found stored token, user session restored:', user.email);
             setUser(user);
           } else {
-            console.log('❌ Stored token is invalid, clearing it');
             await ApiService.setToken(null);
           }
         } catch (error) {
-          console.log('❌ Failed to restore user session, clearing token');
           await ApiService.setToken(null);
         }
       }
     } catch (error) {
-      console.error('❌ Auth initialization failed:', error);
     } finally {
       setLoading(false);
     }
@@ -63,7 +60,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(updatedUser);
       return { success: true };
     } catch (error) {
-      console.error('❌ Profile update failed:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Profile update failed' };
     } finally {
       setLoading(false);
@@ -80,15 +76,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       const response = await ApiService.login(email, password);
       
-      if (response.user && response.token) {
+      if (response.data?.user && response.data?.token) {
         // Set the token in ApiService for future API calls
-        await ApiService.setToken(response.token);
-        setUser(response.user);
+        await ApiService.setToken(response.data.token);
+        setUser(response.data.user);
         return { success: true };
       }
       return { success: false, error: 'Invalid response from server' };
     } catch (err) {
-      console.error('❌ Login failed:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Login failed' };
     } finally {
       setLoading(false);
@@ -98,7 +93,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     // Clear the token from ApiService
     await ApiService.setToken(null);
-    console.log('🔑 Token cleared from ApiService');
     setUser(null);
   };
 

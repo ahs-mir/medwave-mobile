@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,18 +11,45 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Keyboard,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import * as Haptics from 'expo-haptics';
 
 export const LoginScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const { login } = useAuth();
 
+  // Keyboard event listeners
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      setIsKeyboardVisible(true);
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
+  }, []);
+
+  // Dismiss keyboard when tapping outside
+  const dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -30,14 +57,20 @@ export const LoginScreen = ({ navigation }: any) => {
       return;
     }
 
+    // Haptic feedback for login attempt
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsLoading(true);
     
     try {
       const result = await login(email.trim(), password);
       
       if (result.success) {
+        // Haptic feedback for successful login
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         console.log('Login successful, redirecting...');
       } else {
+        // Haptic feedback for failed login
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Login Failed', result.error || 'Invalid email or password');
       }
     } catch (error) {
@@ -104,11 +137,21 @@ export const LoginScreen = ({ navigation }: any) => {
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="height"
         style={styles.keyboardView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.content}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity 
+            style={styles.content}
+            activeOpacity={1}
+            onPress={dismissKeyboard}
+          >
           <View style={styles.header}>
             <Text style={styles.title}>MedWave</Text>
             <Text style={styles.subtitle}>Medical Assistant</Text>
@@ -116,6 +159,7 @@ export const LoginScreen = ({ navigation }: any) => {
 
           <View style={styles.form}>
             <Text style={styles.formTitle}>Sign In</Text>
+            
 
             <View style={styles.inputContainer}>
               <TextInput
@@ -172,7 +216,8 @@ export const LoginScreen = ({ navigation }: any) => {
           <View style={styles.footer}>
             <Text style={styles.versionText}>Version 1.0.0</Text>
           </View>
-        </View>
+          </TouchableOpacity>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -204,6 +249,14 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: '100%',
   },
   content: {
     flex: 1,
