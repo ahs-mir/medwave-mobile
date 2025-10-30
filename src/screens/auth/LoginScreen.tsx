@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import * as Haptics from 'expo-haptics';
+import { DEV_USER_EMAIL, DEV_USER_PASSWORD, DEV_QUICK_LOGIN_ENABLED } from '@env';
 
 export const LoginScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
@@ -72,6 +73,36 @@ export const LoginScreen = ({ navigation }: any) => {
         // Haptic feedback for failed login
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Login Failed', result.error || 'Invalid email or password');
+      }
+    } catch (error) {
+      Alert.alert('Connection Error', 'Could not connect to server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Quick login function for development
+  const handleQuickLogin = async () => {
+    if (!DEV_QUICK_LOGIN_ENABLED || !DEV_USER_EMAIL || !DEV_USER_PASSWORD) {
+      Alert.alert('Development Mode', 'Quick login is not configured');
+      return;
+    }
+
+    // Haptic feedback for quick login
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    
+    try {
+      const result = await login(DEV_USER_EMAIL, DEV_USER_PASSWORD);
+      
+      if (result.success) {
+        // Haptic feedback for successful login
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        console.log('Quick login successful, redirecting...');
+      } else {
+        // Haptic feedback for failed login
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Quick Login Failed', result.error || 'Invalid credentials');
       }
     } catch (error) {
       Alert.alert('Connection Error', 'Could not connect to server.');
@@ -210,6 +241,29 @@ export const LoginScreen = ({ navigation }: any) => {
               )}
             </TouchableOpacity>
 
+            {/* Development Quick Login Button */}
+            {DEV_QUICK_LOGIN_ENABLED === 'true' && __DEV__ && (
+              <View style={styles.devSection}>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>Development</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                
+                <TouchableOpacity 
+                  style={[styles.quickLoginButton, isLoading && styles.quickLoginButtonDisabled]}
+                  onPress={handleQuickLogin}
+                  disabled={isLoading}
+                >
+                  <Ionicons name="flash" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.quickLoginButtonText}>Quick Login as Rizwan</Text>
+                </TouchableOpacity>
+                
+                <Text style={styles.devNote}>
+                  Development mode: Uses pre-configured credentials
+                </Text>
+              </View>
+            )}
 
           </View>
 
@@ -331,6 +385,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  devSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  quickLoginButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickLoginButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  quickLoginButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  devNote: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   footer: {
     alignItems: 'center',

@@ -14,7 +14,7 @@ import LetterService from '../../services/LetterService';
 
 export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
   const { patient, transcription } = route.params;
-  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>('consultation-paragraph');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const letterTypes = [
@@ -42,12 +42,12 @@ export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
     //   description: 'Generate a referral letter to another specialist',
     //   icon: 'clipboard-outline',
     // },
-    // {
-    //   id: 'discharge',
-    //   title: 'Discharge Summary',
-    //   description: 'Create a comprehensive discharge summary',
-    //   icon: 'medical-outline',
-    // },
+    {
+      id: 'discharge',
+      title: 'Discharge Summary',
+      description: 'Create a comprehensive discharge summary',
+      icon: 'medical-outline',
+    },
     {
       id: 'custom',
       title: 'Custom Letter',

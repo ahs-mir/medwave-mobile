@@ -76,10 +76,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       const response = await ApiService.login(email, password);
       
-      if (response.data?.user && response.data?.token) {
+      if (response.user && response.token) {
         // Set the token in ApiService for future API calls
-        await ApiService.setToken(response.data.token);
-        setUser(response.data.user);
+        await ApiService.setToken(response.token);
+        setUser(response.user);
         return { success: true };
       }
       return { success: false, error: 'Invalid response from server' };

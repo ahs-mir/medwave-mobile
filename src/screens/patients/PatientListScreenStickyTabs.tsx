@@ -133,8 +133,18 @@ export const PatientListScreenStickyTabs = () => {
       );
     }
     
-    // Sort alphabetically by name
-    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort based on tab
+    if (activeTab === 'completed') {
+      // Sort by most recent first (updatedAt descending)
+      return filtered.sort((a, b) => {
+        const dateA = new Date(a.updatedAt).getTime();
+        const dateB = new Date(b.updatedAt).getTime();
+        return dateB - dateA; // Most recent first
+      });
+    } else {
+      // Sort alphabetically by name for pending
+      return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    }
   }, [patients, activeTab, searchQuery]);
 
   // Update filtered patients when processedPatients changes

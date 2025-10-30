@@ -10,6 +10,7 @@ import {
   RefreshControl,
   ScrollView,
   Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -33,10 +34,25 @@ export const LettersScreen = () => {
   const [sortBy, setSortBy] = useState<'dateCreated' | 'dateUpdated' | 'patientName'>('dateCreated');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Filter and sort letters
   const filteredLetters = useMemo(() => {
     let filtered = selectedFilter === 'all' ? letters : letters.filter(letter => letter.status === selectedFilter);
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(letter => {
+        const patientName = (letter.patientName || letter.patient_name || 'Unknown Patient').toLowerCase();
+        const letterType = (letter.type || '').toLowerCase();
+        const content = (letter.content || '').toLowerCase();
+        
+        return patientName.includes(query) || 
+               letterType.includes(query) || 
+               content.includes(query);
+      });
+    }
     
     // Sort the filtered letters
     filtered.sort((a, b) => {
@@ -66,7 +82,7 @@ export const LettersScreen = () => {
     });
     
     return filtered;
-  }, [letters, selectedFilter, sortBy, sortOrder]);
+  }, [letters, selectedFilter, sortBy, sortOrder, searchQuery]);
 
   // Helper function to get letter count text
   const getLetterCountText = (count: number) => {
@@ -390,6 +406,30 @@ export const LettersScreen = () => {
               <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
             </View>
 
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputContainer}>
+                <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search letters, patients, or content..."
+                  placeholderTextColor="#9CA3AF"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.clearSearchButton}
+                    onPress={() => setSearchQuery('')}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             {/* Filter Controls */}
             <View style={styles.filterContainer}>
               <ScrollView 
@@ -472,6 +512,30 @@ export const LettersScreen = () => {
           >
             <Ionicons name="options-outline" size={24} color="#0F172A" />
           </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Search Input */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search letters, patients, or content..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={() => setSearchQuery('')}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -640,6 +704,36 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 6,
     fontWeight: '500',
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#0F172A',
+    paddingVertical: 4,
+  },
+  clearSearchButton: {
+    marginLeft: 8,
+    padding: 2,
   },
   content: {
     flex: 1,

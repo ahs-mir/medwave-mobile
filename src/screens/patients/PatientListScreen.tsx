@@ -156,12 +156,22 @@ export const PatientListScreen = () => {
       );
     }
     
-    // Apply sorting (alphabetically ascending)
-    filtered.sort((a, b) => {
-      const nameA = a.name.toLowerCase();
-      const nameB = b.name.toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
+    // Apply sorting
+    if (activeTab === 'completed') {
+      // For completed tab, sort by most recent (updatedAt descending)
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.updatedAt).getTime();
+        const dateB = new Date(b.updatedAt).getTime();
+        return dateB - dateA; // Most recent first
+      });
+    } else {
+      // For pending tab, sort alphabetically ascending
+      filtered.sort((a, b) => {
+        const nameA = a.name.toLowerCase();
+        const nameB = b.name.toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    }
     
     return filtered;
   }, [searchQuery, patients, activeTab]);
@@ -251,7 +261,7 @@ export const PatientListScreen = () => {
         <View>
           <Text style={styles.welcomeText}>Welcome</Text>
           <Text style={styles.doctorName}>
-            {user?.fullName || user?.email?.split('@')[0] || 'User'}
+            {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'User'}
           </Text>
         </View>
         <View style={styles.headerControls}>
@@ -363,8 +373,8 @@ export const PatientListScreen = () => {
             <EmptyState
               icon="people-outline"
               title="No Pending Patients"
-              message="All patients have been completed! 🎉\nGreat job on your rounds today"
-              actionText="Pull down to refresh"
+              message="Pull down to refresh"
+              actionText=""
               onAction={onRefresh}
             />
           )}

@@ -18,7 +18,7 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: "com.riztech.medwave",
       icon: "./assets/icon.png",
-      buildNumber: "1"
+      buildNumber: "2"
     },
     android: {
       adaptiveIcon: {
@@ -39,7 +39,13 @@ module.exports = {
     },
     runtimeVersion: "1.0.0",
     updates: {
-      url: "https://u.expo.dev/dd546335-b1ca-41c4-b066-d4626f5013d1"
-    }
-  }
+      url: "https://u.expo.dev/dd546335-b1ca-41c4-b066-d4626f5013d1",
+      fallbackToCacheTimeout: 0
+    },
+    channel: "production"
+  },
+  plugins: [
+    "expo-audio",
+    "./plugins/with-podfile-rctreleaselevel-fix.js"
+  ]
 };

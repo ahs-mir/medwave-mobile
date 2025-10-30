@@ -299,6 +299,21 @@ class LetterService {
   }
 
   /**
+   * Create a letter directly (used by SimpleLetterDictation)
+   */
+  async createLetter(letterData: CreateLetterRequest): Promise<any> {
+    try {
+      console.log('💾 Creating letter with data:', letterData);
+      const savedLetter = await this.apiService.createLetter(letterData);
+      console.log('✅ Letter created successfully:', savedLetter.id);
+      return savedLetter;
+    } catch (error) {
+      console.error('❌ Failed to create letter:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get all letters for the current user
    */
   async getLetters(status?: string): Promise<any[]> {

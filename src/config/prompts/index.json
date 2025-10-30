@@ -54,7 +54,7 @@
       "description": "Create a comprehensive discharge summary",
       "icon": "medical-outline",
       "category": "discharge", 
-      "isActive": false,
+      "isActive": true,
       "file": "discharge.json"
     },
     {

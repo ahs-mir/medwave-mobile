@@ -29,6 +29,7 @@ import { streamOpenAI } from '../../lib/openaiStream';
 import { loadPrompt, replacePromptPlaceholders } from '../../config/aiPrompts';
 import PatientStateService from '../../services/PatientStateService';
 import ClinicalLetterModal from '../../components/ClinicalLetterModal';
+import SimpleLetterDictation from '../../components/SimpleLetterDictation';
 import RenderHtml from 'react-native-render-html';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Speech from 'expo-speech';
@@ -76,9 +77,15 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     timestamp: Date;
     isVoice?: boolean;
   }>>([]);
+  
+  // Tab state for Create Letter / History
+  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
+  const [patientLetters, setPatientLetters] = useState<any[]>([]);
+  const [loadingLetters, setLoadingLetters] = useState(false);
   const [showGeneratedLetter, setShowGeneratedLetter] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedLetterType, setSelectedLetterType] = useState<string>('consultation');
+  const [consultationFormat, setConsultationFormat] = useState<'headings' | 'paragraphs'>('paragraphs');
   const [showValidationMessage, setShowValidationMessage] = useState(false);
   const [recordingPulse, setRecordingPulse] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -98,6 +105,8 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     letterType?: string;
   }>>([]);
   const [currentInput, setCurrentInput] = useState('');
+  const [showSimpleLetterDictation, setShowSimpleLetterDictation] = useState(false);
+  const [preGeneratedLetter, setPreGeneratedLetter] = useState<string>('');
 
   // Letter types configuration
   const letterTypes = [
@@ -105,15 +114,15 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
       id: 'consultation',
       title: 'Consultation',
       shortTitle: 'Consultation',
-      description: 'Letter with section headings',
+      description: 'Standard consultation letter',
       icon: 'document-text-outline',
     },
     {
-      id: 'consultation-paragraph',
-      title: 'Consultation (Paragraphs Only)',
-      shortTitle: 'Paragraphs',
-      description: 'Letter without section headings',
-      icon: 'document-outline',
+      id: 'discharge',
+      title: 'Discharge Summary',
+      shortTitle: 'Discharge',
+      description: 'Discharge summary letter',
+      icon: 'exit-outline',
     },
     {
       id: 'custom',
@@ -283,8 +292,8 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
         return 'Consultation (Paragraphs Only)';
       // case 'referral':
       //   return 'Referral Letter';
-      // case 'discharge':
-      //   return 'Discharge Summary';
+      case 'discharge':
+        return 'Discharge Summary';
       case 'custom':
         return 'Custom Letter';
       // case 'soap':
@@ -670,6 +679,93 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     await handleGenerateLetterFromChat(letterType);
   };
 
+  // Generate letter and then show popup
+  const generateLetterForPopup = async (letterType: string) => {
+    const textToUse = currentInput.trim();
+    
+    if (!textToUse) {
+      Alert.alert('No Content', 'Please add some text before generating a letter.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setPreGeneratedLetter('');
+
+    try {
+      console.log('🔄 Generating letter before showing popup...');
+
+      // Load the configured prompt
+      let promptKey: string;
+      switch (letterType) {
+        case 'consultation':
+          promptKey = 'consultation';
+          break;
+        case 'consultation-paragraph':
+          promptKey = 'consultation-paragraph';
+          break;
+        case 'discharge':
+          promptKey = 'discharge';
+          break;
+        case 'custom':
+          promptKey = 'custom';
+          break;
+        default:
+          promptKey = 'consultation';
+      }
+
+      const promptConfig = await loadPrompt(promptKey);
+      if (!promptConfig) {
+        throw new Error('Failed to load prompt configuration');
+      }
+
+      const replacements = {
+        patientName: patient.name || 'Unknown Patient',
+        patientMRN: patient.medicalNumber || patient.id || 'N/A',
+        patientAge: patient.age || 'N/A',
+        patientCondition: patient.condition || 'General consultation',
+        currentDate: new Date().toLocaleDateString(),
+        transcription: textToUse || ''
+      };
+
+      const prompt = replacePromptPlaceholders(promptConfig.userPrompt, replacements);
+      const systemRole = promptConfig.systemRole;
+
+      // Accumulate the full letter
+      let fullLetter = '';
+
+      // Generate using streaming
+      const cancelStream = streamOpenAI({
+        prompt,
+        systemRole,
+        onToken: (token: string) => {
+          fullLetter += token;
+        },
+        onEnd: () => {
+          console.log('✅ Letter generation complete, opening popup');
+          console.log('Generated letter length:', fullLetter.length);
+          setPreGeneratedLetter(fullLetter);
+          setIsGenerating(false);
+          // Small delay to ensure state is updated before opening modal
+          setTimeout(() => {
+            setShowSimpleLetterDictation(true);
+          }, 100);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+        onError: (error: string) => {
+          console.error('❌ Letter generation failed:', error);
+          setIsGenerating(false);
+          Alert.alert('Error', 'Failed to generate letter. Please try again.');
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Letter generation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setIsGenerating(false);
+      Alert.alert('Error', `Failed to generate letter: ${errorMessage}`);
+    }
+  };
+
   // Handle regenerating a letter
   const handleRegenerateLetter = async (letterType: string) => {
     const textToUse = rawTranscription || currentInput;
@@ -841,6 +937,29 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     };
   }, []);
 
+  // Fetch patient letters for history tab
+  const fetchPatientLetters = async () => {
+    if (!patient?.id) return;
+    
+    setLoadingLetters(true);
+    try {
+      const letters = await ApiService.getPatientLetters(patient.id);
+      setPatientLetters(letters);
+    } catch (error) {
+      console.error('❌ Error fetching patient letters:', error);
+      setNetworkError('Failed to load letter history');
+    } finally {
+      setLoadingLetters(false);
+    }
+  };
+
+  // Load patient letters when history tab is activated
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchPatientLetters();
+    }
+  }, [activeTab, patient?.id]);
+
   // Critical cleanup on component unmount to prevent audio recording crashes
   useEffect(() => {
     return () => {
@@ -870,31 +989,67 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
-        {/* Header */}
+        {/* Uber BASE Header */}
         <View
-          style={styles.header}
+          style={styles.uberHeader}
           onLayout={(event) => {
             setHeaderHeight(event.nativeEvent.layout.height);
           }}
         >
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            style={styles.backButton}
+            style={styles.uberBackButton}
           >
             <Ionicons name="chevron-back" size={24} color="#000000" />
           </TouchableOpacity>
 
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{patient.name}</Text>
-            <View style={styles.headerInfoRow}>
-              <Text style={styles.headerDOB}>
-                DOB: {new Date(patient.dob).toLocaleDateString()}
-              </Text>
-              <Text style={styles.headerMRN}>MR #: {patient.id}</Text>
-            </View>
+          <View style={styles.uberHeaderContent}>
+            <Text style={styles.uberHeaderTitle}>{patient.name}</Text>
+            <Text style={styles.uberHeaderSubtitle}>
+              MR #{patient.id} • DOB: {new Date(patient.dob).toLocaleDateString()}
+            </Text>
           </View>
 
+          <View style={styles.uberHeaderRight} />
+
         </View>
+
+        {/* Uber-style Tabs */}
+        <View style={styles.tabsContainer}>
+          <View style={styles.tabsWrapper}>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                styles.tabLeft,
+                activeTab === 'create' && styles.tabActive
+              ]}
+              onPress={() => setActiveTab('create')}
+            >
+              <Text style={[
+                styles.tabText,
+                activeTab === 'create' && styles.tabTextActive
+              ]}>
+                Create Letter
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                styles.tabRight,
+                activeTab === 'history' && styles.tabActive
+              ]}
+              onPress={() => setActiveTab('history')}
+            >
+              <Text style={[
+                styles.tabText,
+                activeTab === 'history' && styles.tabTextActive
+              ]}>
+                History ({patientLetters.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <KeyboardAvoidingView
           behavior="height"
           style={{ flex: 1 }}
@@ -916,162 +1071,266 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
             </View>
           )}
 
-          {/* Chat Messages */}
-          <FlatList
-            ref={chatFlatListRef}
-            data={chatMessages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderChatMessage}
-            onScrollBeginDrag={() => {
-              console.log('📜 User started scrolling');
-            }}
-            onScrollEndDrag={() => console.log('📜 User ended scrolling')}
-            style={styles.chatContainer}
-            contentContainerStyle={styles.chatContentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            onLayout={() => {
-              // Scroll to bottom when layout is ready
-              if (chatMessages.length > 0) {
-                setTimeout(() => scrollToBottom(), 100);
-              }
-            }}
-            ListEmptyComponent={() => (
-              <View style={styles.emptyStateContainer}>
-                <Text style={styles.emptyStateText}>Start dictating...</Text>
-              </View>
+          {/* Uber Base Design System */}
+          <View style={styles.uberContainer}>
+            {activeTab === 'create' ? (
+              /* Create Letter Tab Content */
+              <ScrollView 
+                style={styles.scrollContent}
+                contentContainerStyle={styles.scrollContentContainer}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Text Input */}
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    ref={textInputRef}
+                    style={styles.textInput}
+                    placeholder="Start typing or dictate your letter..."
+                    placeholderTextColor="#8E8E93"
+                    value={currentInput}
+                    onChangeText={setCurrentInput}
+                    multiline
+                    textAlignVertical="top"
+                    maxLength={10000}
+                  />
+                  <View style={styles.characterCounter}>
+                    <Text style={styles.characterCounterText}>
+                      {currentInput.length}/10000
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Letter Type */}
+                <View style={styles.optionGroup}>
+                  <Text style={styles.optionLabel}>Letter Type:</Text>
+                  <View style={styles.chipsRow}>
+                    {letterTypes.map((type) => (
+                      <TouchableOpacity
+                        key={type.id}
+                        style={[
+                          styles.chip,
+                          selectedLetterType === type.id && styles.chipSelected
+                        ]}
+                        onPress={() => setSelectedLetterType(type.id)}
+                        disabled={isGenerating}
+                      >
+                        <Text style={[
+                          styles.chipText,
+                          selectedLetterType === type.id && styles.chipTextSelected
+                        ]}>
+                          {type.shortTitle}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Format - Only show when Consultation is selected */}
+                {selectedLetterType === 'consultation' && (
+                  <View style={styles.optionGroup}>
+                    <Text style={styles.optionLabel}>Format:</Text>
+                    <View style={styles.segmentedControl}>
+                      <TouchableOpacity
+                        style={[
+                          styles.segment,
+                          styles.segmentLeft,
+                          consultationFormat === 'paragraphs' && styles.segmentSelected
+                        ]}
+                        onPress={() => setConsultationFormat('paragraphs')}
+                        disabled={isGenerating}
+                      >
+                        <Text style={[
+                          styles.segmentText,
+                          consultationFormat === 'paragraphs' && styles.segmentTextSelected
+                        ]}>
+                          Paragraphs
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.segment,
+                          styles.segmentRight,
+                          consultationFormat === 'headings' && styles.segmentSelected
+                        ]}
+                        onPress={() => setConsultationFormat('headings')}
+                        disabled={isGenerating}
+                      >
+                        <Text style={[
+                          styles.segmentText,
+                          consultationFormat === 'headings' && styles.segmentTextSelected
+                        ]}>
+                          Headings
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              /* History Tab Content */
+              <ScrollView 
+                style={styles.scrollContent}
+                contentContainerStyle={styles.scrollContentContainer}
+                showsVerticalScrollIndicator={false}
+              >
+                {loadingLetters ? (
+                  <View style={styles.historyLoading}>
+                    <ActivityIndicator size="large" color="#000000" />
+                    <Text style={styles.historyLoadingText}>Loading letter history...</Text>
+                  </View>
+                ) : patientLetters.length === 0 ? (
+                  <View style={styles.historyEmpty}>
+                    <Ionicons name="document-outline" size={48} color="#8E8E93" />
+                    <Text style={styles.historyEmptyTitle}>No Previous Letters</Text>
+                    <Text style={styles.historyEmptySubtitle}>
+                      Letters created for this patient will appear here
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.historyList}>
+                    {patientLetters.map((letter, index) => (
+                      <TouchableOpacity
+                        key={letter.id}
+                        style={[
+                          styles.historyItem,
+                          index === patientLetters.length - 1 && styles.historyItemLast
+                        ]}
+                        onPress={() => {
+                          // Navigate to letter detail screen
+                          navigation.navigate('LetterDetail', { 
+                            letterId: letter.id,
+                            letter: letter,
+                            patient: patient 
+                          });
+                        }}
+                      >
+                        <View style={styles.historyItemContent}>
+                          <View style={styles.historyItemHeader}>
+                            <Text style={styles.historyItemType}>
+                              {letter.type === 'consultation' ? 'Consultation Letter' : 'Custom Letter'}
+                            </Text>
+                            <View style={styles.historyItemStatus}>
+                              <Text style={[
+                                styles.historyItemStatusText,
+                                styles[`historyItemStatus${letter.status?.charAt(0).toUpperCase() + letter.status?.slice(1)}`]
+                              ]}>
+                                {letter.status || 'Draft'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.historyItemDate}>
+                            {new Date(letter.createdAt || letter.created_at).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'numeric', 
+                              day: 'numeric'
+                            })}
+                          </Text>
+                          <Text style={styles.historyItemSnippet} numberOfLines={2}>
+                            {letter.content ? letter.content.replace(/<[^>]*>/g, '') : 'No content available'}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
             )}
-          />
 
-
-          {/* ChatGPT-style Bottom Input Bar */}
-          <View
-            style={[styles.bottomInputBar, { paddingBottom: insets.bottom }]}
-          >
-            <View style={styles.inputContainer}>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  ref={textInputRef}
-                  style={[
-                    styles.chatInput,
-                    {
-                      minHeight:
-                        currentInput.length > 0
-                          ? Math.min(
-                              Math.max(
-                                currentInput.split('\n').length * 20 + 20,
-                                20
-                              ),
-                              120
-                            )
-                          : 20,
-                      maxHeight: 120,
-                    },
-                  ]}
-                  placeholder="Type or dictate..."
-                  placeholderTextColor="#9CA3AF"
-                  value={currentInput}
-                  onChangeText={setCurrentInput}
-                  multiline
-                  maxLength={3500}
-                  textAlignVertical="center"
-                  onContentSizeChange={(event) => {
-                    // Dynamic height based on content
-                    const { height } = event.nativeEvent.contentSize;
-                    // Height is automatically managed by the container style above
-                  }}
-                />
-
-
-                {/* Send button - now shows letter type popup */}
+            {/* Fixed Footer with Generate Button - Only show for Create tab */}
+            {activeTab === 'create' && (
+              <View style={styles.footer}>
                 <TouchableOpacity
                   style={[
-                    styles.sendButton,
-                    !currentInput.trim() && styles.sendButtonDisabled,
+                    styles.primaryButton,
+                    (!currentInput.trim() || !selectedLetterType || isGenerating) && styles.primaryButtonDisabled
                   ]}
-                  onPress={() => setShowLetterTypeSheet(true)}
-                  disabled={!currentInput.trim()}
+                  onPress={() => {
+                    if (selectedLetterType) {
+                      // Determine the actual letter type to generate
+                      let actualLetterType = selectedLetterType;
+                      if (selectedLetterType === 'consultation') {
+                        actualLetterType = consultationFormat === 'headings' ? 'consultation' : 'consultation-paragraph';
+                      }
+                      generateLetterForPopup(actualLetterType);
+                    }
+                  }}
+                  disabled={!currentInput.trim() || !selectedLetterType || isGenerating}
                 >
-                  <Ionicons
-                    name="send"
-                    size={18}
-                    color={currentInput.trim() ? '#FFFFFF' : '#9CA3AF'}
-                  />
+                  {isGenerating ? (
+                    <>
+                      <ActivityIndicator size="small" color="white" />
+                      <Text style={[styles.primaryButtonText, { marginLeft: 8 }]}>
+                        Generating...
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.primaryButtonText}>
+                      Generate Letter
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
-            </View>
-
+            )}
           </View>
         </KeyboardAvoidingView>
-        {/* Letter Type Selection Modal */}
+        {/* Uber BASE Letter Type Selection Modal - Centered Popup */}
         {showLetterTypeSheet && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.letterTypeModal}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Letter Type</Text>
-                <TouchableOpacity 
-                  onPress={() => setShowLetterTypeSheet(false)}
-                  style={styles.modalCloseButton}
-                >
-                  <Ionicons name="close" size={24} color="#6B7280" />
-                </TouchableOpacity>
+          <View style={styles.baseModalOverlay}>
+            <TouchableOpacity 
+              style={styles.baseModalBackdrop}
+              activeOpacity={1}
+              onPress={() => setShowLetterTypeSheet(false)}
+            />
+            <View style={styles.baseModal}>
+              {/* BASE Modal Header */}
+              <View style={styles.baseModalHeader}>
+                <View style={styles.baseModalHeaderContent}>
+                  <Text style={styles.baseModalTitle}>Select Letter Type</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowLetterTypeSheet(false)}
+                    style={styles.baseModalCloseButton}
+                  >
+                    <Ionicons name="close" size={20} color="#000000" />
+                  </TouchableOpacity>
+                </View>
               </View>
               
-              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                {letterTypes.map((type) => (
+              {/* BASE Modal Content */}
+              <View style={styles.baseModalContent}>
+                {letterTypes.map((type, index) => (
                   <TouchableOpacity
                     key={type.id}
                     style={[
-                      styles.letterTypeOption,
-                      selectedLetterType === type.id && styles.letterTypeOptionSelected
+                      styles.baseOption,
+                      selectedLetterType === type.id && styles.baseOptionSelected,
+                      index === letterTypes.length - 1 && styles.baseOptionLast
                     ]}
-                    onPress={() => setSelectedLetterType(type.id)}
+                    onPress={async () => {
+                      setSelectedLetterType(type.id);
+                      setShowLetterTypeSheet(false);
+                      // Generate letter first, then open popup with the result
+                      await generateLetterForPopup(type.id);
+                    }}
                   >
-                    <View style={styles.letterTypeOptionContent}>
-                      <View style={[
-                        styles.letterTypeIcon,
-                        selectedLetterType === type.id && styles.letterTypeIconSelected
-                      ]}>
-                        <Ionicons 
-                          name={type.icon as any} 
-                          size={20} 
-                          color={selectedLetterType === type.id ? '#FFFFFF' : '#000000'} 
-                        />
+                    <View style={styles.baseOptionContent}>
+                      <View style={styles.baseOptionText}>
+                        <Text style={[
+                          styles.baseOptionTitle,
+                          selectedLetterType === type.id && styles.baseOptionTitleSelected
+                        ]}>
+                          {type.title}
+                        </Text>
                       </View>
-                      <Text style={[
-                        styles.letterTypeTitle,
-                        selectedLetterType === type.id && styles.letterTypeTitleSelected
-                      ]}>
-                        {type.title}
-                      </Text>
+                      {selectedLetterType === type.id && (
+                        <View style={styles.baseOptionCheckmark}>
+                          <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                        </View>
+                      )}
                     </View>
-                    {selectedLetterType === type.id && (
-                      <Ionicons name="checkmark-circle" size={24} color="#000000" />
-                    )}
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
-              
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[
-                    styles.modalGenerateButton,
-                    (!selectedLetterType || !currentInput.trim()) && styles.modalGenerateButtonDisabled
-                  ]}
-                  onPress={() => {
-                    if (selectedLetterType && currentInput.trim()) {
-                      handleGenerateLetter(selectedLetterType);
-                      setShowLetterTypeSheet(false);
-                    }
-                  }}
-                  disabled={!selectedLetterType || !currentInput.trim() || isGenerating}
-                >
-                  {isGenerating ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.modalGenerateButtonText}>Generate Letter</Text>
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1267,6 +1526,32 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
           generatedLetter={generatedLetter}
           patientName={patient.name}
         />
+
+        {/* Simple Letter Dictation Modal */}
+        <SimpleLetterDictation
+          visible={showSimpleLetterDictation}
+          patient={patient}
+          selectedLetterType={selectedLetterType}
+          inputText={currentInput}
+          preGeneratedContent={preGeneratedLetter}
+          onClose={() => {
+            setShowSimpleLetterDictation(false)
+            setPreGeneratedLetter('')
+          }}
+          onLetterCreated={() => {
+            setShowSimpleLetterDictation(false)
+            setCurrentInput('')
+            setSelectedLetterType('')
+            setPreGeneratedLetter('')
+            if (onLetterCreated) {
+              onLetterCreated()
+            }
+            // Mark that patient list needs refreshing
+            PatientStateService.markPatientUpdated(patient.id)
+            // Navigate back to patient list
+            navigation.goBack()
+          }}
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -1277,61 +1562,98 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  header: {
+  // Uber BASE Header
+  uberHeader: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#E5E5E5',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+  uberBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCenter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+  uberHeaderContent: {
+    flex: 1,
     alignItems: 'center',
-    zIndex: -1,
+    marginHorizontal: 16,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+  uberHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
+    letterSpacing: -0.3,
   },
-  headerInfoRow: {
+  uberHeaderSubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  uberHeaderRight: {
+    width: 40,
+    height: 40,
+  },
+  // Uber-style Tabs - Subtle Design
+  tabsContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#F0F0F0',
+  },
+  tabsWrapper: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+    padding: 2,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
   },
-  headerDOB: {
+  tabLeft: {
+    marginRight: 1,
+  },
+  tabRight: {
+    marginLeft: 1,
+  },
+  tabActive: {
+    backgroundColor: '#000000',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 0.5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  tabText: {
     fontSize: 13,
-    color: '#64748B',
     fontWeight: '500',
+    color: '#8E8E93',
+    textAlign: 'center',
   },
-  headerMRN: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  headerRight: {
-    width: 44,
+  tabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
@@ -1658,15 +1980,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
     zIndex: 1,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
   },
@@ -2221,29 +2543,37 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  // Letter type modal styles
+  // Letter type modal styles - Tight & Matching
   letterTypeModal: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginVertical: 40,
-    height: 400,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    marginHorizontal: 0,
+    marginTop: 'auto',
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    maxHeight: '60%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 4,
   },
   letterTypeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   letterTypeOptionSelected: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#1F2937',
   },
   letterTypeOptionContent: {
     flex: 1,
@@ -2251,19 +2581,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   letterTypeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 10,
   },
   letterTypeIconSelected: {
     backgroundColor: '#1F2937',
   },
   letterTypeTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
     color: '#374151',
     flex: 1,
@@ -2293,5 +2623,447 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  
+  // Uber BASE Design System
+  uberContainer: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  
+  // Scrollable Content
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+  },
+  
+  // Option Group - BASE (Clean, No Headers)
+  optionGroup: {
+    marginTop: 24,
+  },
+  optionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 10,
+    fontFamily: 'System',
+    letterSpacing: 0,
+  },
+  
+  // Selected Type Indicator - Uber BASE
+  selectedTypeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  selectedTypeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000000',
+    marginLeft: 8,
+    flex: 1,
+  },
+  clearTypeButton: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+  },
+  
+  // Input Wrapper with Character Counter - BASE
+  inputWrapper: {
+    position: 'relative',
+  },
+  textInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 36,
+    fontSize: 16,
+    color: '#000000',
+    minHeight: 160,
+    maxHeight: 220,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    lineHeight: 24,
+  },
+  characterCounter: {
+    position: 'absolute',
+    bottom: 10,
+    right: 12,
+  },
+  characterCounterText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#8E8E93',
+    fontFamily: 'System',
+  },
+  
+  // History Tab Styles
+  historyLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  historyLoadingText: {
+    fontSize: 16,
+    color: '#6B6B6B',
+    marginTop: 16,
+    fontWeight: '500',
+  },
+  historyEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  historyEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000000',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  historyEmptySubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  historyList: {
+    paddingTop: 8,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5E5',
+    backgroundColor: '#FFFFFF',
+  },
+  historyItemLast: {
+    borderBottomWidth: 0,
+  },
+  historyItemContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  historyItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  historyItemType: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+    flex: 1,
+  },
+  historyItemDate: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  historyItemSnippet: {
+    fontSize: 13,
+    color: '#6B6B6B',
+    lineHeight: 18,
+  },
+  historyItemStatus: {
+    marginLeft: 8,
+  },
+  historyItemStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    textTransform: 'capitalize',
+  },
+  historyItemStatusDraft: {
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+  },
+  historyItemStatusCreated: {
+    backgroundColor: '#DBEAFE',
+    color: '#1E40AF',
+  },
+  historyItemStatusApproved: {
+    backgroundColor: '#D1FAE5',
+    color: '#065F46',
+  },
+  historyItemStatusPosted: {
+    backgroundColor: '#E5E7EB',
+    color: '#374151',
+  },
+  
+  // Fixed Footer - BASE
+  footer: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  
+  // Primary Button - Uber BASE (Sharp, Minimal)
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 4,
+    minHeight: 52,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: '#C7C7CC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  
+  // Letter Type Chips - BASE (Sharp, Minimal)
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  chip: {
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 4,
+    backgroundColor: '#F6F6F6',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  chipSelected: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#545454',
+    fontFamily: 'System',
+    letterSpacing: 0,
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  
+  // Segmented Control - BASE (Sharp, Clean)
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#F6F6F6',
+    borderRadius: 4,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentLeft: {
+    borderTopLeftRadius: 3,
+    borderBottomLeftRadius: 3,
+  },
+  segmentRight: {
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  segmentSelected: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#545454',
+    fontFamily: 'System',
+    letterSpacing: 0,
+  },
+  segmentTextSelected: {
+    color: '#000000',
+    fontWeight: '600',
+  },
+  
+  // Uber BASE Modal Styles - Centered Popup
+  baseModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  baseModalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  baseModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '85%',
+    maxWidth: 400,
+    maxHeight: '70%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 1001,
+  },
+  baseModalHeader: {
+    paddingTop: 24,
+    paddingBottom: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  baseModalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  baseModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000000',
+    letterSpacing: -0.4,
+    fontFamily: 'System',
+  },
+  baseModalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  baseModalContent: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  
+  // BASE Option Styles - Following Uber BASE Design Tokens
+  baseOption: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    marginBottom: 8,
+    minHeight: 56,
+    overflow: 'hidden', // Ensure content doesn't bleed outside
+  },
+  baseOptionSelected: {
+    backgroundColor: '#F8F9FA',
+    borderColor: '#000000',
+    borderWidth: 2,
+  },
+  baseOptionLast: {
+    marginBottom: 0,
+    backgroundColor: '#FFFFFF', // Explicitly set white background for last item
+  },
+  baseOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    minHeight: 56,
+  },
+  baseOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  baseOptionIconSelected: {
+    backgroundColor: '#000000',
+  },
+  baseOptionText: {
+    flex: 1,
+  },
+  baseOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+    letterSpacing: -0.2,
+    fontFamily: 'System',
+  },
+  baseOptionTitleSelected: {
+    color: '#000000',
+  },
+  baseOptionDescription: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6B6B6B',
+    lineHeight: 20,
+    letterSpacing: -0.1,
+    fontFamily: 'System',
+  },
+  baseOptionDescriptionSelected: {
+    color: '#6B6B6B',
+  },
+  baseOptionCheckmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
   },
 });

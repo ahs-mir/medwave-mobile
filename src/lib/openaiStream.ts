@@ -2,6 +2,12 @@
 import EventSource from "react-native-sse";
 import { fetch } from 'expo/fetch';
 import ApiService from "../services/ApiService";
+import { API_BASE_URL } from '@env';
+
+const BASE_URL =
+  (typeof process !== 'undefined' && (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL) ||
+  API_BASE_URL ||
+  'https://slippery-glass-production.up.railway.app/api';
 
 type ChunkHandler = (text: string) => void;
 
@@ -30,7 +36,7 @@ export async function streamLetterGeneration(
     }
 
     // Use backend streaming endpoint instead of direct OpenAI
-    const url = "https://slippery-glass-production.up.railway.app/api/ai/generate-letter-stream";
+    const url = `${BASE_URL}/ai/generate-letter-stream`;
 
     const body = JSON.stringify({
       prompt,
@@ -127,7 +133,7 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
       }
 
       // Use backend streaming endpoint
-      const url = "https://slippery-glass-production.up.railway.app/api/ai/generate-letter-stream";
+      const url = `${BASE_URL}/ai/generate-letter-stream`;
 
       const body = JSON.stringify({
         prompt,
@@ -206,7 +212,7 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
         }
 
         // Continue polling if request is still active
-        if (xhr.readyState !== 4 && isActive) {
+        if (xhr && xhr.readyState !== 4 && isActive) {
           setTimeout(pollResponse, 100); // Poll every 100ms
         }
       };

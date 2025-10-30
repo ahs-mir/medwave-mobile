@@ -49,7 +49,29 @@
       <false/>
       <key>NSAllowsLocalNetworking</key>
       <true/>
+      <key>NSExceptionDomains</key>
+      <dict>
+        <key>railway.app</key>
+        <dict>
+          <key>NSIncludesSubdomains</key>
+          <true/>
+          <key>NSExceptionRequiresForwardSecrecy</key>
+          <true/>
+          <key>NSExceptionMinimumTLSVersion</key>
+          <string>TLSv1.2</string>
+        </dict>
+      </dict>
     </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your camera</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your photos</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>MedWave needs access to your location to provide location-based features for medical appointments and healthcare services.</string>
+    <key>RCTNewArchEnabled</key>
+    <true/>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
@@ -74,12 +96,6 @@
     </array>
     <key>UIUserInterfaceStyle</key>
     <string>Light</string>
-    <key>NSCameraUsageDescription</key>
-    <string>This app uses the camera to scan patient documents and automatically fill in their information, saving you time and reducing data entry errors.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>This app may access location data to help healthcare providers find nearby medical facilities and improve patient care coordination.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app uses the microphone to record voice notes for patient documentation and clinical letter generation.</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
   </dict>

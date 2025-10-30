@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "hooks": {
+      "postPublish": [
+        {
+          "file": "scripts/fix-expo-rn-compat.js"
+        }
+      ]
+    }
+  }
+}

@@ -13,15 +13,44 @@
     },
     "preview": {
       "distribution": "internal",
+      "cache": {
+        "disabled": false
+      },
+      "ios": {
+        "resourceClass": "large"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "channel": "staging",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://rwave-staging.up.railway.app/api"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production",
+      "cache": {
+        "disabled": false
+      },
+      "env": {
+        "DEV_QUICK_LOGIN_ENABLED": "false"
+      },
+      "ios": {
+        "buildConfiguration": "Release",
+        "resourceClass": "large"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleTeamId": "B87HM5RH7R",
+        "ascAppId": "6751819516"
+      }
+    }
   }
 }

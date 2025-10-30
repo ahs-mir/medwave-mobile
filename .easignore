@@ -1,0 +1,22 @@
+# Ignore files that don't need to be uploaded to EAS Build
+node_modules/
+.expo/
+dist/
+web-build/
+public/
+.git/
+.gitignore
+*.log
+.DS_Store
+*.md
+e2e/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+docs/
+.easignore
+ios/build/
+ios/Pods/
+android/build/
+android/.gradle/

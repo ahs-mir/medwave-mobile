@@ -1,5 +1,15 @@
-// Use Railway production backend for real database
-const BASE_URL = 'https://slippery-glass-production.up.railway.app/api';
+// Use environment-driven base URL. Prefer Expo runtime env, then .env via @env, then prod default
+import { API_BASE_URL } from '@env';
+
+const BASE_URL =
+  (typeof process !== 'undefined' && (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL) ||
+  API_BASE_URL ||
+  'https://slippery-glass-production.up.railway.app/api';
+
+// Log the resolved BASE_URL for debugging
+console.log('🔧 BASE_URL configured:', BASE_URL);
+console.log('🔧 API_BASE_URL from @env:', API_BASE_URL);
+console.log('🔧 EXPO_PUBLIC_API_BASE_URL from process.env:', typeof process !== 'undefined' ? (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL : 'N/A');
 
 import {
   UserFrontend,
@@ -163,6 +173,7 @@ class ApiService {
       console.log(`🌐 API Request: ${config.method || 'GET'} ${url}`);
       console.log(`📋 Request Body:`, options.body);
       console.log(`🔑 Token:`, this.token ? 'Present' : 'Missing');
+      console.log(`🔍 BASE_URL resolved to: ${BASE_URL}`);
       
       const response = await fetch(url, config);
 
@@ -185,6 +196,13 @@ class ApiService {
       return data;
     } catch (error) {
       console.error(`❌ API request failed: ${url}`, error);
+      
+      // Better error handling for network failures
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error(`❌ Network error - Check if BASE_URL is accessible: ${BASE_URL}`);
+        throw new Error('Network request failed. Please check your internet connection.');
+      }
+      
       throw error;
     }
   }
