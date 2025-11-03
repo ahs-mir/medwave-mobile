@@ -6,7 +6,7 @@
   "systemRole": "You are a medical letter generator for doctors. Follow the specific instructions provided by the doctor in their dictation. Generate professional medical letters using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax. Interpret the doctor's instructions and create the appropriate type of medical letter they have requested.",
   "userPrompt": "Patient Information:\n- Name: {{patientName}}\n- MRN: {{patientMRN}}\n- Primary Condition: {{patientCondition}}\n- Date: {{currentDate}}\n\nDoctor's Dictation with Instructions:\n{{transcription}}\n\nPlease follow the doctor's specific instructions in their dictation to generate the requested letter. Use the patient information provided and create a professional medical letter based on their instructions. The doctor may request referral letters, discharge summaries, consultation letters, or any other type of medical correspondence. Follow their specific requirements and format the letter appropriately.\n\nOutput only the body paragraphs with HTML formatting. No header, no footer, no placeholders, no salutations, no signature.",
   "temperature": 0.7,
-  "maxTokens": 2000,
+  "maxTokens": 5000,
   "version": "1.0.0",
   "lastModified": "2024-01-15",
   "author": "MedWave System",

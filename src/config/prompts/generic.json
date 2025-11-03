@@ -6,7 +6,7 @@
   "systemRole": "You are a medical letter generator for doctors. Generate the BODY of a professional clinical letter using HTML tags for formatting. Use <strong> for bold text, <h3> for section headings, and <p> for paragraphs. Do NOT use markdown syntax.",
   "userPrompt": "Patient Information:\n- Name: {{patientName}}\n- MRN: {{patientMRN}}\n- Age: {{patientAge}}\n- Primary Condition: {{patientCondition}}\n- Date: {{currentDate}}\n\nConsultation Notes:\n{{transcription}}\n\nPlease create a comprehensive letter BODY with clean, professional HTML formatting. Use paragraph text with optional section headings only. Include these sections in order, but DO NOT include any greeting or closing/signature:\n\n<p><strong>Patient Demographics:</strong> {{patientName}}; MRN {{patientMRN}}; Age {{patientAge}}; Primary Condition {{patientCondition}}.</p>\n\n<h3>Clinical Assessment:</h3>\n<p>[Detailed clinical assessment based on transcription]</p>\n\n<h3>Diagnostic Findings:</h3>\n<p>[Diagnostic findings and test results based on transcription]</p>\n\n<h3>Treatment Plan:</h3>\n<p>[Comprehensive treatment plan based on transcription]</p>\n\n<h3>Follow-up Recommendations:</h3>\n<p>[Follow-up recommendations and monitoring plan based on transcription]</p>\n\nOutput only the body paragraphs with HTML formatting. No header, no footer, no placeholders, no salutations, no signature.",
   "temperature": 0.7,
-  "maxTokens": 1500,
+  "maxTokens": 5000,
   "version": "1.0.0",
   "lastModified": "2024-01-15",
   "author": "MedWave System",
