@@ -2,10 +2,12 @@
 import EventSource from "react-native-sse";
 import { fetch } from 'expo/fetch';
 import ApiService from "../services/ApiService";
+import Constants from 'expo-constants';
 import { API_BASE_URL } from '@env';
 
+// Priority: expo-constants (set in app.config.js) > .env file > hardcoded fallback
 const BASE_URL =
-  (typeof process !== 'undefined' && (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL) ||
+  Constants.expoConfig?.extra?.apiBaseUrl ||
   API_BASE_URL ||
   'https://slippery-glass-production.up.railway.app/api';
 

@@ -1,15 +1,17 @@
-// Use environment-driven base URL. Prefer Expo runtime env, then .env via @env, then prod default
+// Use expo-constants for reliable runtime access to API URL
+import Constants from 'expo-constants';
 import { API_BASE_URL } from '@env';
 
+// Priority: expo-constants (set in app.config.js) > .env file > hardcoded fallback
 const BASE_URL =
-  (typeof process !== 'undefined' && (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL) ||
+  Constants.expoConfig?.extra?.apiBaseUrl ||
   API_BASE_URL ||
   'https://slippery-glass-production.up.railway.app/api';
 
 // Log the resolved BASE_URL for debugging
 console.log('🔧 BASE_URL configured:', BASE_URL);
+console.log('🔧 Constants.expoConfig.extra.apiBaseUrl:', Constants.expoConfig?.extra?.apiBaseUrl);
 console.log('🔧 API_BASE_URL from @env:', API_BASE_URL);
-console.log('🔧 EXPO_PUBLIC_API_BASE_URL from process.env:', typeof process !== 'undefined' ? (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL : 'N/A');
 
 import {
   UserFrontend,
@@ -157,6 +159,32 @@ class ApiService {
     }
 
     return response.json();
+  }
+
+  // Get all letter types (prompts) from backend database
+  async getLetterTypes(): Promise<any[]> {
+    try {
+      const response = await this.request('/letter-types', {
+        method: 'GET'
+      });
+      return response.letterTypes || response;
+    } catch (error) {
+      console.error('Error fetching letter types from API:', error);
+      throw error;
+    }
+  }
+
+  // Get single letter type by ID from backend database
+  async getLetterType(id: string): Promise<any> {
+    try {
+      const response = await this.request(`/letter-types/${id}`, {
+        method: 'GET'
+      });
+      return response.letterType || response;
+    } catch (error) {
+      console.error(`Error fetching letter type ${id} from API:`, error);
+      throw error;
+    }
   }
 
   private async request(endpoint: string, options: RequestInit = {}) {
