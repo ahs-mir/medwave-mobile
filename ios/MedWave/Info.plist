@@ -63,13 +63,15 @@
       </dict>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your camera</string>
+    <string>MedWave uses your camera to scan patient lists and medical documents, automatically extracting patient information to save you time during data entry. For example, you can photograph a clinic patient list to quickly import multiple patient records.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>MedWave may use your microphone to record voice notes and audio documentation for patient consultations and medical records.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your photos</string>
+    <string>MedWave accesses your photo library to let you select and attach medical documents, patient lists, and images to patient records for comprehensive documentation.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>MedWave needs access to your location to provide location-based features for medical appointments and healthcare services.</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>RCTNewArchEnabled</key>
     <true/>
     <key>UILaunchStoryboardName</key>

@@ -12,7 +12,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 
 // Define tab param list
 export type MainTabParamList = {
-  Home: undefined;
+  // Home: undefined; // Hidden for now
+  Patients: undefined;
   Letters: undefined;
   Settings: undefined;
 };
@@ -28,7 +29,7 @@ export const MainTabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Home') {
+          if (route.name === 'Patients') {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Letters') {
             iconName = focused ? 'document-text' : 'document-text-outline';
@@ -67,8 +68,16 @@ export const MainTabNavigator = () => {
         headerShown: false,
       })}
     >
-      <Tab.Screen 
+      {/* Home tab hidden for now */}
+      {/* <Tab.Screen 
         name="Home" 
+        component={DashboardScreen}
+        options={{
+          tabBarLabel: 'Home',
+        }}
+      /> */}
+      <Tab.Screen 
+        name="Patients" 
         component={PatientListScreen}
         options={{
           tabBarLabel: 'Patients',
