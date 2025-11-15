@@ -37,6 +37,7 @@
         "disabled": false
       },
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://slippery-glass-production.up.railway.app/api",
         "DEV_QUICK_LOGIN_ENABLED": "false"
       },
       "ios": {

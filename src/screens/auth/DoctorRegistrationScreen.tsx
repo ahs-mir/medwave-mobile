@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+import * as Haptics from 'expo-haptics';
+import OAuthService from '../../services/OAuthService';
 
 const DoctorRegistrationScreen = ({ navigation }: any) => {
   const [formData, setFormData] = useState({
@@ -27,6 +30,113 @@ const DoctorRegistrationScreen = ({ navigation }: any) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAppleAvailable, setIsAppleAvailable] = useState(false);
+  
+  const { loginWithGoogle, loginWithApple } = useAuth();
+
+  // Check if Apple Sign-In is available (iOS 13+)
+  useEffect(() => {
+    const checkAppleAvailability = async () => {
+      if (Platform.OS === 'ios') {
+        const available = await OAuthService.isAppleSignInAvailable();
+        setIsAppleAvailable(available);
+      }
+    };
+    checkAppleAvailability();
+  }, []);
+
+  // OAuth registration handlers
+  const handleGoogleRegister = async () => {
+    // Prompt for role selection
+    Alert.alert(
+      'Select Your Role',
+      'Please select your role to complete registration',
+      [
+        { 
+          text: 'Doctor', 
+          onPress: async () => {
+            await performGoogleRegistration('doctor', formData.specialization);
+          }
+        },
+        { 
+          text: 'Secretary', 
+          onPress: async () => {
+            await performGoogleRegistration('secretary');
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const performGoogleRegistration = async (role: string, specialization?: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    
+    try {
+      const result = await loginWithGoogle(role, specialization);
+      
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        console.log('Google registration successful');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Registration Failed', result.error || 'Failed to register with Google');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleRegister = async () => {
+    // Prompt for role selection
+    Alert.alert(
+      'Select Your Role',
+      'Please select your role to complete registration',
+      [
+        { 
+          text: 'Doctor', 
+          onPress: async () => {
+            await performAppleRegistration('doctor', formData.specialization);
+          }
+        },
+        { 
+          text: 'Secretary', 
+          onPress: async () => {
+            await performAppleRegistration('secretary');
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const performAppleRegistration = async (role: string, specialization?: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    
+    try {
+      const result = await loginWithApple(role, specialization);
+      
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        console.log('Apple registration successful');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (result.requiresEmail) {
+          Alert.alert('Email Required', 'Please provide your email to complete registration');
+        } else {
+          Alert.alert('Registration Failed', result.error || 'Failed to register with Apple');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleRegister = async () => {
     if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
@@ -80,6 +190,40 @@ const DoctorRegistrationScreen = ({ navigation }: any) => {
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Register as a Doctor</Text>
           </View>
+
+          {/* OAuth Registration Buttons */}
+          {(true || isAppleAvailable) && (
+            <View style={styles.oauthSection}>
+              {/* Google Register - Always show for now (can be configured later) */}
+              <TouchableOpacity 
+                style={[styles.oauthButton, styles.googleButton, isLoading && styles.oauthButtonDisabled]}
+                onPress={handleGoogleRegister}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-google" size={20} color="#4285F4" style={{ marginRight: 12 }} />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+
+              {isAppleAvailable && (
+                <TouchableOpacity 
+                  style={[styles.oauthButton, styles.appleButton, isLoading && styles.oauthButtonDisabled]}
+                  onPress={handleAppleRegister}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="logo-apple" size={20} color="#FFFFFF" style={{ marginRight: 12 }} />
+                  <Text style={styles.appleButtonText}>Continue with Apple</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+            </View>
+          )}
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
@@ -294,6 +438,57 @@ const styles = StyleSheet.create({
   loginLinkBold: {
     fontWeight: '600',
     color: '#111827',
+  },
+  oauthSection: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  oauthButton: {
+    height: 48,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  oauthButtonDisabled: {
+    opacity: 0.5,
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+  },
+  googleButtonText: {
+    color: '#000000',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  appleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
 

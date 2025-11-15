@@ -7,12 +7,15 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  Dimensions,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiService from '../../services/ApiService';
 import { useAuth } from '../../context/AuthContext';
+
+const { width } = Dimensions.get('window');
 
 export const DashboardScreen = ({ navigation }: any) => {
   const { user, logout } = useAuth();
@@ -470,7 +473,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -6,
   },
   quickActionCard: {
-    width: '48%',
+    width: (width - 60) / 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,

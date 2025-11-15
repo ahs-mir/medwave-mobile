@@ -10,8 +10,10 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/ApiService';
 import { PatientFrontend } from '../../types';
@@ -28,7 +30,7 @@ import PatientStateService from '../../services/PatientStateService';
 import * as Haptics from 'expo-haptics';
 
 type PatientListScreenNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Home'>,
+  BottomTabNavigationProp<MainTabParamList, 'Patients'>,
   StackNavigationProp<AppStackParamList>
 >;
 
@@ -256,78 +258,92 @@ export const PatientListScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Welcome</Text>
-          <Text style={styles.doctorName}>
-            {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'User'}
-          </Text>
+      {/* Hero Header */}
+      <LinearGradient
+        colors={['#FAFAFA', '#F5F5F5']}
+        style={styles.heroHeader}
+      >
+        <View style={styles.headerTop}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>Welcome</Text>
+            <Text style={styles.doctorName}>
+              {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'User'}
+            </Text>
+          </View>
+          <View style={styles.headerControls}>
+            {/* Refresh Button */}
+            <TouchableOpacity
+              style={styles.refreshButton}
+              onPress={() => {
+                if (isAuthenticated) {
+                  fetchPatients();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh" size={20} color="#000000" />
+            </TouchableOpacity>
+            
+            {/* Add Patient Button */}
+            <TouchableOpacity 
+              style={styles.addButton}
+              onPress={() => (navigation as any).navigate('AddPatient')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.headerControls}>
-          {/* Refresh Button */}
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search patients..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
           <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => {
-              if (isAuthenticated) {
-                fetchPatients();
-              }
-            }}
+            style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
+            onPress={() => handleTabChange('pending')}
+            activeOpacity={0.7}
           >
-            <Ionicons name="refresh" size={20} color="#6B7280" />
-          </TouchableOpacity>
-          
-          
-          {/* Add Patient Button */}
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => (navigation as any).navigate('AddPatient')}
-          >
-            <Ionicons name="add" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search patients..."
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-          onPress={() => handleTabChange('pending')}
-        >
-          <View style={styles.tabContent}>
             <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
               Pending
             </Text>
-            <Text style={[styles.tabCountText, activeTab === 'pending' && styles.activeTabCountText]}>
-              ({patients.filter(patient => (patient.letterCount || 0) === 0).length})
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => handleTabChange('completed')}
-        >
-          <View style={styles.tabContent}>
+            <View style={[styles.tabBadge, activeTab === 'pending' && styles.activeTabBadge]}>
+              <Text style={[styles.tabBadgeText, activeTab === 'pending' && styles.activeTabBadgeText]}>
+                {patients.filter(patient => (patient.letterCount || 0) === 0).length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+            onPress={() => handleTabChange('completed')}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
               Completed
             </Text>
-            <Text style={[styles.tabCountText, activeTab === 'completed' && styles.activeTabCountText]}>
-              ({patients.filter(patient => (patient.letterCount || 0) > 0).length})
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+            <View style={[styles.tabBadge, activeTab === 'completed' && styles.activeTabBadge]}>
+              <Text style={[styles.tabBadgeText, activeTab === 'completed' && styles.activeTabBadgeText]}>
+                {patients.filter(patient => (patient.letterCount || 0) > 0).length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
 
 
@@ -410,131 +426,175 @@ export const PatientListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFBFC',
+    backgroundColor: '#FFFFFF',
   },
-  header: {
+  
+  // Hero Header
+  heroHeader: {
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 0 : 20,
+    paddingBottom: 24,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 20,
-    paddingTop: 40,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F2F5',
-    overflow: 'hidden',
+    marginBottom: 20,
   },
-  headerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  headerLeft: {
+    flex: 1,
   },
-  headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  welcomeText: {
+  greeting: {
     fontSize: 16,
-    color: '#64748B',
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   doctorName: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    color: '#000000',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#0F172A',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
+  
+  // Search Bar
   searchContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    marginTop: 16,
-  },
-  searchInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#0F172A',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    color: '#000000',
+    fontWeight: '400',
   },
+  clearButton: {
+    padding: 4,
+  },
+
+  // Tabs
   tabsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    gap: 8,
+    gap: 12,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  tabContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     gap: 8,
   },
   activeTab: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   tabText: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#9CA3AF',
+    letterSpacing: -0.2,
   },
   activeTabText: {
-    color: '#111827',
+    color: '#000000',
     fontWeight: '700',
   },
-  tabCountText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9CA3AF',
+  tabBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  activeTabCountText: {
-    color: '#374151',
-    fontWeight: '600',
+  activeTabBadge: {
+    backgroundColor: '#000000',
+  },
+  tabBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  activeTabBadgeText: {
+    color: '#FFFFFF',
   },
   emptyStateContainer: {
     flex: 1,
@@ -567,79 +627,72 @@ const styles = StyleSheet.create({
   // List View Styles
   patientListItem: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 2,
-    marginHorizontal: 0,
+    borderRadius: 0,
+    padding: 20,
+    marginBottom: 0,
+    marginHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#F3F4F6',
     borderLeftWidth: 0,
     borderRightWidth: 0,
     borderTopWidth: 0,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
   },
   listItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
   },
   listAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#374151',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
   },
   listAvatarText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   listInfoSection: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 16,
     justifyContent: 'center',
   },
   listPatientName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 1,
+    color: '#000000',
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   listMRNumber: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
   },
   listStatusSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-    minWidth: 20,
+    marginRight: 12,
+    minWidth: 24,
   },
   greenTick: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#ECFDF5',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#10B981',
   },
   listArrowSection: {
-    marginLeft: 6,
+    marginLeft: 0,
   },
   listViewContent: {
     paddingHorizontal: 0,
-    paddingBottom: 20,
+    paddingBottom: 40,
+    paddingTop: 8,
   },
   lettersLoadingIndicator: {
     flexDirection: 'row',
@@ -657,18 +710,18 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   sectionHeader: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FAFAFA',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F3F4F6',
   },
   sectionHeaderText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#475569',
+    color: '#6B7280',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -678,9 +731,9 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#64748B',
+    color: '#6B7280',
     marginTop: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
@@ -690,26 +743,33 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#DC2626',
+    color: '#EF4444',
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   retryButton: {
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#000000',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
 });

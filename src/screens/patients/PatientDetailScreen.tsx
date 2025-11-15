@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -937,6 +937,20 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     };
   }, []);
 
+  // Helper to pre-process letter data (strip HTML, format dates) - runs once
+  const processLetterData = useCallback((letters: any[]) => {
+    return letters.map(letter => ({
+      ...letter,
+      plainText: letter.content ? letter.content.replace(/<[^>]*>/g, '') : 'No content available',
+      formattedDate: new Date(letter.createdAt || (letter as any).created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'numeric', 
+        day: 'numeric'
+      }),
+      letterTypeLabel: letter.type === 'consultation' ? 'Consultation Letter' : 'Custom Letter'
+    }));
+  }, []);
+
   // Fetch patient letters for history tab
   const fetchPatientLetters = async () => {
     if (!patient?.id) return;
@@ -944,7 +958,15 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     setLoadingLetters(true);
     try {
       const letters = await ApiService.getPatientLetters(patient.id);
-      setPatientLetters(letters);
+      // Sort letters by creation date (newest first) - do it once
+      const sortedLetters = letters.sort((a, b) => {
+        const dateA = new Date(a.createdAt || (a as any).created_at).getTime();
+        const dateB = new Date(b.createdAt || (b as any).created_at).getTime();
+        return dateB - dateA;
+      });
+      // Pre-process data once (strip HTML, format dates)
+      const processedLetters = processLetterData(sortedLetters);
+      setPatientLetters(processedLetters);
     } catch (error) {
       console.error('❌ Error fetching patient letters:', error);
       setNetworkError('Failed to load letter history');
@@ -958,7 +980,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     if (activeTab === 'history') {
       fetchPatientLetters();
     }
-  }, [activeTab, patient?.id]);
+  }, [activeTab, patient?.id, processLetterData]);
 
   // Critical cleanup on component unmount to prevent audio recording crashes
   useEffect(() => {
@@ -972,6 +994,47 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
       
     };
   }, []); // Empty dependency array means this runs on unmount only
+
+  // Memoized Letter Item Component for performance
+  const LetterItem = React.memo(({ letter, isLast, onPress }: {
+    letter: any;
+    isLast: boolean;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity
+      style={[
+        styles.historyItem,
+        isLast && styles.historyItemLast
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.historyItemContent}>
+        <View style={styles.historyItemHeader}>
+          <Text style={styles.historyItemType}>
+            {letter.letterTypeLabel}
+          </Text>
+          <View style={styles.historyItemStatus}>
+            <Text style={[
+              styles.historyItemStatusText,
+              letter.status === 'draft' && styles.historyItemStatusDraft,
+              letter.status === 'created' && styles.historyItemStatusCreated,
+              letter.status === 'approved' && styles.historyItemStatusApproved,
+              letter.status === 'posted' && styles.historyItemStatusPosted,
+            ]}>
+              {letter.status || 'Draft'}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.historyItemDate}>
+          {letter.formattedDate}
+        </Text>
+        <Text style={styles.historyItemSnippet} numberOfLines={2}>
+          {letter.plainText}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+    </TouchableOpacity>
+  ));
 
   const formatLastSaved = () => {
     if (!lastSaved) return null;
@@ -1000,7 +1063,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
             onPress={() => navigation.goBack()}
             style={styles.uberBackButton}
           >
-            <Ionicons name="chevron-back" size={24} color="#000000" />
+            <Ionicons name="chevron-back" size={22} color="#000000" />
           </TouchableOpacity>
 
           <View style={styles.uberHeaderContent}>
@@ -1009,8 +1072,6 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
               MR #{patient.id} • DOB: {new Date(patient.dob).toLocaleDateString()}
             </Text>
           </View>
-
-          <View style={styles.uberHeaderRight} />
 
         </View>
 
@@ -1104,7 +1165,11 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                 {/* Letter Type */}
                 <View style={styles.optionGroup}>
                   <Text style={styles.optionLabel}>Letter Type:</Text>
-                  <View style={styles.chipsRow}>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipsRow}
+                  >
                     {letterTypes.map((type) => (
                       <TouchableOpacity
                         key={type.id}
@@ -1123,7 +1188,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                         </Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
+                  </ScrollView>
                 </View>
 
                 {/* Format - Only show when Consultation is selected */}
@@ -1168,74 +1233,47 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                 )}
               </ScrollView>
             ) : (
-              /* History Tab Content */
-              <ScrollView 
-                style={styles.scrollContent}
-                contentContainerStyle={styles.scrollContentContainer}
-                showsVerticalScrollIndicator={false}
-              >
-                {loadingLetters ? (
-                  <View style={styles.historyLoading}>
-                    <ActivityIndicator size="large" color="#000000" />
-                    <Text style={styles.historyLoadingText}>Loading letter history...</Text>
-                  </View>
-                ) : patientLetters.length === 0 ? (
-                  <View style={styles.historyEmpty}>
-                    <Ionicons name="document-outline" size={48} color="#8E8E93" />
-                    <Text style={styles.historyEmptyTitle}>No Previous Letters</Text>
-                    <Text style={styles.historyEmptySubtitle}>
-                      Letters created for this patient will appear here
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.historyList}>
-                    {patientLetters.map((letter, index) => (
-                      <TouchableOpacity
-                        key={letter.id}
-                        style={[
-                          styles.historyItem,
-                          index === patientLetters.length - 1 && styles.historyItemLast
-                        ]}
-                        onPress={() => {
-                          // Navigate to letter detail screen
-                          navigation.navigate('LetterDetail', { 
-                            letterId: letter.id,
-                            letter: letter,
-                            patient: patient 
-                          });
-                        }}
-                      >
-                        <View style={styles.historyItemContent}>
-                          <View style={styles.historyItemHeader}>
-                            <Text style={styles.historyItemType}>
-                              {letter.type === 'consultation' ? 'Consultation Letter' : 'Custom Letter'}
-                            </Text>
-                            <View style={styles.historyItemStatus}>
-                              <Text style={[
-                                styles.historyItemStatusText,
-                                styles[`historyItemStatus${letter.status?.charAt(0).toUpperCase() + letter.status?.slice(1)}`]
-                              ]}>
-                                {letter.status || 'Draft'}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.historyItemDate}>
-                            {new Date(letter.createdAt || letter.created_at).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'numeric', 
-                              day: 'numeric'
-                            })}
-                          </Text>
-                          <Text style={styles.historyItemSnippet} numberOfLines={2}>
-                            {letter.content ? letter.content.replace(/<[^>]*>/g, '') : 'No content available'}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </ScrollView>
+              /* History Tab Content - Optimized with FlatList */
+              loadingLetters ? (
+                <View style={styles.historyLoading}>
+                  <ActivityIndicator size="large" color="#000000" />
+                  <Text style={styles.historyLoadingText}>Loading letter history...</Text>
+                </View>
+              ) : patientLetters.length === 0 ? (
+                <View style={styles.historyEmpty}>
+                  <Ionicons name="document-outline" size={48} color="#8E8E93" />
+                  <Text style={styles.historyEmptyTitle}>No Previous Letters</Text>
+                  <Text style={styles.historyEmptySubtitle}>
+                    Letters created for this patient will appear here
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={patientLetters}
+                  renderItem={({ item: letter, index }) => (
+                    <LetterItem
+                      letter={letter}
+                      isLast={index === patientLetters.length - 1}
+                      onPress={() => {
+                        navigation.navigate('LetterDetail', { 
+                          letterId: letter.id,
+                          letter: letter,
+                          patient: patient 
+                        });
+                      }}
+                    />
+                  )}
+                  keyExtractor={(letter) => letter.id.toString()}
+                  contentContainerStyle={styles.scrollContentContainer}
+                  style={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                  initialNumToRender={20}
+                  maxToRenderPerBatch={10}
+                  windowSize={10}
+                  removeClippedSubviews={true}
+                  updateCellsBatchingPeriod={50}
+                />
+              )
             )}
 
             {/* Fixed Footer with Generate Button - Only show for Create tab */}
@@ -1266,7 +1304,10 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                       </Text>
                     </>
                   ) : (
-                    <Text style={styles.primaryButtonText}>
+                    <Text style={[
+                      styles.primaryButtonText,
+                      (!currentInput.trim() || !selectedLetterType || isGenerating) && styles.primaryButtonTextDisabled
+                    ]}>
                       Generate Letter
                     </Text>
                   )}
@@ -1562,94 +1603,79 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  // Uber BASE Header
+  // Header - Zander Whitehurst Style (No Borders, Left-Aligned, More White Space)
   uberHeader: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingVertical: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    borderBottomWidth: 0,
   },
   uberBackButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
   uberHeaderContent: {
     flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 16,
+    alignItems: 'flex-start',
+    marginLeft: 12,
   },
   uberHeaderTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#000000',
-    textAlign: 'center',
+    textAlign: 'left',
     marginBottom: 4,
     letterSpacing: -0.3,
   },
   uberHeaderSubtitle: {
     fontSize: 14,
-    color: '#6B6B6B',
-    fontWeight: '500',
-    textAlign: 'center',
+    color: '#6B7280',
+    fontWeight: '400',
+    textAlign: 'left',
     lineHeight: 20,
   },
-  uberHeaderRight: {
-    width: 40,
-    height: 40,
-  },
-  // Uber-style Tabs - Subtle Design
+  // Tabs - Zander Whitehurst Style (More Spacing)
   tabsContainer: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#F0F0F0',
+    paddingVertical: 16,
+    borderBottomWidth: 0,
   },
   tabsWrapper: {
     flexDirection: 'row',
-    backgroundColor: '#FAFAFA',
-    borderRadius: 8,
-    padding: 2,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    padding: 3,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabLeft: {
-    marginRight: 1,
+    marginRight: 0,
   },
   tabRight: {
-    marginLeft: 1,
+    marginLeft: 0,
   },
   tabActive: {
-    backgroundColor: '#000000',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 0.5 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1,
+    backgroundColor: '#111827',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#6B7280',
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   tabTextActive: {
     color: '#FFFFFF',
@@ -1659,8 +1685,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
-    paddingBottom: 120,
+    flex: 1,
   },
   inputModeSelector: {
     flexDirection: 'row',
@@ -2318,7 +2343,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     backgroundColor: '#FFFFFF',
   },
-  inputWrapper: {
+  chatInputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: '#F9FAFB',
@@ -2631,27 +2656,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   
-  // Scrollable Content
-  scrollContent: {
-    flex: 1,
-  },
+  // Scrollable Content Container
   scrollContentContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 24,
   },
   
   // Option Group - BASE (Clean, No Headers)
   optionGroup: {
-    marginTop: 24,
+    marginTop: 32,
   },
   optionLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#000000',
-    marginBottom: 10,
+    marginBottom: 12,
     fontFamily: 'System',
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   },
   
   // Selected Type Indicator - Uber BASE
@@ -2679,34 +2701,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   
-  // Input Wrapper with Character Counter - BASE
+  // Input Wrapper with Character Counter - Zander Whitehurst Style
   inputWrapper: {
     position: 'relative',
+    marginBottom: 32,
   },
   textInput: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 4,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 36,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 44,
     fontSize: 16,
     color: '#000000',
-    minHeight: 160,
-    maxHeight: 220,
+    minHeight: 180,
+    maxHeight: 240,
     textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderWidth: 0,
     lineHeight: 24,
+    letterSpacing: -0.2,
   },
   characterCounter: {
     position: 'absolute',
-    bottom: 10,
-    right: 12,
+    bottom: 16,
+    right: 16,
   },
   characterCounterText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#9CA3AF',
     fontFamily: 'System',
   },
   
@@ -2813,22 +2836,16 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   
-  // Fixed Footer - BASE
+  // Fixed Footer - Zander Whitehurst Style (Surface Color, No Border)
   footer: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 3,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 24,
+    borderTopWidth: 0,
   },
   
-  // Primary Button - Uber BASE (Sharp, Minimal)
+  // Primary Button - Zander Whitehurst Style (No Borders, Clear Primary Action)
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2836,94 +2853,84 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 4,
+    borderRadius: 12,
     minHeight: 52,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 0,
   },
   primaryButtonDisabled: {
-    backgroundColor: '#C7C7CC',
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: '#E5E7EB',
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
+  },
+  primaryButtonTextDisabled: {
+    color: '#9CA3AF',
   },
   
-  // Letter Type Chips - BASE (Sharp, Minimal)
+  // Letter Type Chips - Zander Whitehurst Style (Single Line, Horizontal Scroll)
   chipsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    flexWrap: 'nowrap',
+    gap: 8,
+    paddingRight: 24, // Extra padding for scroll edge
   },
   chip: {
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 4,
-    backgroundColor: '#F6F6F6',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 0,
   },
   chipSelected: {
-    backgroundColor: '#000000',
-    borderColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
   chipText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
-    color: '#545454',
+    color: '#374151',
     fontFamily: 'System',
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   },
   chipTextSelected: {
-    color: '#FFFFFF',
+    color: '#000000',
     fontWeight: '600',
   },
   
-  // Segmented Control - BASE (Sharp, Clean)
+  // Segmented Control - Zander Whitehurst Style (No Borders, Surface Colors)
   segmentedControl: {
     flexDirection: 'row',
-    backgroundColor: '#F6F6F6',
-    borderRadius: 4,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 0,
   },
   segment: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   segmentLeft: {
-    borderTopLeftRadius: 3,
-    borderBottomLeftRadius: 3,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
   },
   segmentRight: {
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
   },
   segmentSelected: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
   },
   segmentText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
-    color: '#545454',
+    color: '#6B7280',
     fontFamily: 'System',
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   },
   segmentTextSelected: {
     color: '#000000',

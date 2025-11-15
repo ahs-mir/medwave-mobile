@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,69 +6,48 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import StorageService from '../services/StorageService';
 import ProfileEditModal from '../components/ProfileEditModal';
+import ApiService from '../services/ApiService';
 
 const SettingsScreen = () => {
   const { user, logout } = useAuth();
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  
+  // API key configuration removed - using shared default key
 
-  useEffect(() => {
-    loadApiKey();
-  }, []);
-
-  const loadApiKey = async () => {
-    try {
-      const storedKey = await StorageService.getOpenAIKey();
-      if (storedKey) {
-        setApiKey(storedKey);
-      }
-    } catch (error) {
-      // Silent error handling
-    }
-  };
-
-  const saveApiKey = async () => {
-    if (!apiKey.trim()) {
-      Alert.alert('Error', 'Please enter a valid API key');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await StorageService.setOpenAIKey(apiKey.trim());
-      Alert.alert('Success', 'API key saved successfully');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save API key');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const removeApiKey = async () => {
+  const handleDeleteAccount = () => {
     Alert.alert(
-      'Remove API Key',
-      'Are you sure you want to remove your API key? This will disable AI features.',
+      'Delete Account',
+      'Are you sure you want to permanently delete your account? This will delete all your patients, letters, and data. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              await StorageService.removeOpenAIKey();
-              setApiKey('');
-              Alert.alert('Success', 'API key removed');
+              const response = await ApiService.deleteAccount();
+
+              if (response.success) {
+                Alert.alert(
+                  'Account Deleted',
+                  'Your account has been permanently deleted.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => logout()
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', response.error || 'Failed to delete account');
+              }
             } catch (error) {
-              Alert.alert('Error', 'Failed to remove API key');
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
             }
           },
         },
@@ -93,6 +72,13 @@ const SettingsScreen = () => {
         [{ text: 'OK' }]
       ),
     },
+    {
+      icon: 'trash-outline',
+      title: 'Delete Account',
+      description: 'Permanently delete your account and data',
+      onPress: handleDeleteAccount,
+      destructive: true,
+    },
   ];
 
   return (
@@ -111,63 +97,8 @@ const SettingsScreen = () => {
           <Text style={styles.userRole}>{user?.role}</Text>
         </View>
 
-        {/* API Key Section */}
-        <View style={styles.settingsSection}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="key-outline" size={20} color="#374151" />
-            <Text style={styles.sectionTitle}>OpenAI API Key</Text>
-          </View>
-          <Text style={styles.sectionDescription}>
-            Required for AI-powered features like voice transcription and letter generation
-          </Text>
-          
-          <View style={styles.apiKeyContainer}>
-            <View style={styles.apiKeyInputContainer}>
-              <TextInput
-                style={styles.apiKeyInput}
-                placeholder="Enter your OpenAI API key"
-                value={apiKey}
-                onChangeText={setApiKey}
-                secureTextEntry={!showApiKey}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowApiKey(!showApiKey)}
-              >
-                <Ionicons
-                  name={showApiKey ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#6B7280"
-                />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.apiKeyButtons}>
-              <TouchableOpacity
-                style={[styles.apiKeyButton, styles.saveButton]}
-                onPress={saveApiKey}
-                disabled={isLoading}
-              >
-                <Text style={styles.saveButtonText}>
-                  {isLoading ? 'Saving...' : 'Save'}
-                </Text>
-              </TouchableOpacity>
-              
-              {apiKey && (
-                <TouchableOpacity
-                  style={[styles.apiKeyButton, styles.removeButton]}
-                  onPress={removeApiKey}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.removeButtonText}>Remove</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
+        {/* API Key Section - Hidden: Using shared default API key */}
+        {/* Users no longer need to configure their own OpenAI API key */}
 
         <View style={styles.settingsSection}>
           {settingsOptions.map((option, index) => (
@@ -177,9 +108,18 @@ const SettingsScreen = () => {
               onPress={option.onPress}
             >
               <View style={styles.settingsItemLeft}>
-                <Ionicons name={option.icon as any} size={24} color="#374151" />
+                <Ionicons 
+                  name={option.icon as any} 
+                  size={24} 
+                  color={option.destructive ? "#EF4444" : "#374151"} 
+                />
                 <View style={styles.settingsItemText}>
-                  <Text style={styles.settingsItemTitle}>{option.title}</Text>
+                  <Text style={[
+                    styles.settingsItemTitle,
+                    option.destructive && styles.destructiveText
+                  ]}>
+                    {option.title}
+                  </Text>
                   <Text style={styles.settingsItemDescription}>
                     {option.description}
                   </Text>
@@ -363,6 +303,9 @@ const styles = StyleSheet.create({
   settingsItemDescription: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  destructiveText: {
+    color: '#EF4444',
   },
   logoutButton: {
     flexDirection: 'row',

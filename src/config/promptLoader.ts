@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import ApiService from '../services/ApiService';
 
 export interface PromptConfig {
   id: string;
@@ -47,100 +48,90 @@ class PromptLoader {
   }
 
   /**
-   * Load the prompt index file
+   * Load the prompt index from database API
    */
   async loadPromptIndex(): Promise<PromptIndex> {
-    if (this.indexCache) {
-      return this.indexCache;
-    }
-
     try {
-      // In React Native, we need to use require for static assets
-      const indexData = require('./prompts/index.json');
+      console.log('🌐 Fetching prompt index from database API...');
+      
+      const letterTypes = await ApiService.getLetterTypes();
+      
+      // Build index from database data
+      const categories = Array.from(new Set(letterTypes.map((lt: any) => lt.category)));
+      
+      const indexData: PromptIndex = {
+        version: '2.0.0',
+        lastUpdated: new Date().toISOString().split('T')[0],
+        totalPrompts: letterTypes.length,
+        categories,
+        prompts: letterTypes.map((lt: any) => ({
+          id: lt.id,
+          name: lt.name,
+          description: lt.description,
+          icon: lt.icon,
+          category: lt.category,
+          isActive: lt.isActive,
+          file: `${lt.id}.json` // For compatibility
+        }))
+      };
+      
       this.indexCache = indexData;
+      console.log(`✅ Loaded prompt index from database: ${indexData.totalPrompts} prompts`);
       return indexData;
     } catch (error) {
-      console.error('Failed to load prompt index:', error);
-      throw new Error('Failed to load prompt index');
+      console.error('❌ Failed to load prompt index from database:', error);
+      throw new Error('Failed to load prompt index from database');
     }
   }
 
   /**
-   * Load a specific prompt by ID
+   * Load a specific prompt by ID from database API
    */
   async loadPrompt(promptId: string): Promise<PromptConfig | null> {
-    // For development, always reload to get latest changes
-    // In production, you might want to keep the cache
-    if (__DEV__) {
-      this.promptsCache.delete(promptId);
-    } else if (this.promptsCache.has(promptId)) {
+    // Check cache first (unless in development mode)
+    if (!__DEV__ && this.promptsCache.has(promptId)) {
+      console.log(`📦 Using cached prompt: ${promptId}`);
       return this.promptsCache.get(promptId)!;
     }
 
     try {
-      // Use a static mapping approach instead of dynamic require
-      const promptData = this.getPromptData(promptId);
+      console.log(`🌐 Fetching prompt from database API: ${promptId}`);
       
-      if (promptData && this.validatePrompt(promptData)) {
+      // Fetch from backend API
+      const apiData = await ApiService.getLetterType(promptId);
+      
+      // Map backend field names to frontend format
+      const promptData: PromptConfig = {
+        id: apiData.id,
+        name: apiData.name,
+        description: apiData.description,
+        icon: apiData.icon,
+        systemRole: apiData.systemRole,
+        userPrompt: apiData.userPrompt,
+        temperature: apiData.temperature,
+        maxTokens: apiData.maxTokens,
+        version: apiData.version,
+        author: apiData.author,
+        category: apiData.category,
+        isActive: apiData.isActive,
+        lastModified: apiData.lastModified
+      };
+      
+      if (this.validatePrompt(promptData)) {
         // Cache the prompt
         this.promptsCache.set(promptId, promptData);
+        console.log(`✅ Loaded and cached prompt from database: ${promptId}`);
         return promptData;
       } else {
-        console.error(`Invalid prompt data for ${promptId}`);
+        console.error(`❌ Invalid prompt data from API for ${promptId}`);
         return null;
       }
     } catch (error) {
-      console.error(`Failed to load prompt ${promptId}:`, error);
+      console.error(`❌ Failed to load prompt ${promptId} from database:`, error);
       return null;
     }
   }
 
-  /**
-   * Get prompt data using static require statements
-   * This approach is compatible with React Native
-   */
-  private getPromptData(promptId: string): PromptConfig | null {
-    try {
-      console.log(`🔍 Loading prompt data for: ${promptId}`);
-      let promptData: PromptConfig | null = null;
-      
-      switch (promptId) {
-        case 'clinical':
-          promptData = require('./prompts/clinical.json');
-          break;
-        case 'consultation':
-          promptData = require('./prompts/consultation.json');
-          break;
-        case 'consultation-paragraph':
-          promptData = require('./prompts/consultation-paragraph.json');
-          break;
-        case 'referral':
-          promptData = require('./prompts/referral.json');
-          break;
-        case 'discharge':
-          promptData = require('./prompts/discharge.json');
-          break;
-        case 'custom':
-          promptData = require('./prompts/custom.json');
-          break;
-        case 'soap':
-          promptData = require('./prompts/soap.json');
-          break;
-        case 'generic':
-          promptData = require('./prompts/generic.json');
-          break;
-        default:
-          console.warn(`Unknown prompt ID: ${promptId}`);
-          return null;
-      }
-      
-      console.log(`✅ Loaded prompt data for ${promptId}:`, promptData ? 'SUCCESS' : 'NULL');
-      return promptData;
-    } catch (error) {
-      console.error(`❌ Failed to load prompt file for ${promptId}:`, error);
-      return null;
-    }
-  }
 
   /**
    * Clear the prompt cache
@@ -151,25 +142,43 @@ class PromptLoader {
   }
 
   /**
-   * Load all active prompts
+   * Load all active prompts from database API
    */
   async loadAllPrompts(): Promise<PromptConfig[]> {
     try {
-      const index = await this.loadPromptIndex();
-      const activePrompts: PromptConfig[] = [];
-
-      for (const promptInfo of index.prompts) {
-        if (promptInfo.isActive) {
-          const prompt = await this.loadPrompt(promptInfo.id);
-          if (prompt) {
-            activePrompts.push(prompt);
-          }
-        }
-      }
-
-      return activePrompts;
+      console.log('🌐 Fetching all letter types from database API...');
+      
+      // Fetch all letter types from backend
+      const apiData = await ApiService.getLetterTypes();
+      
+      // Map and filter active prompts
+      const prompts: PromptConfig[] = apiData
+        .filter((item: any) => item.isActive)
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          icon: item.icon,
+          systemRole: item.systemRole,
+          userPrompt: item.userPrompt,
+          temperature: item.temperature,
+          maxTokens: item.maxTokens,
+          version: item.version,
+          author: item.author,
+          category: item.category,
+          isActive: item.isActive,
+          lastModified: item.lastModified
+        }));
+      
+      // Cache all prompts
+      prompts.forEach(prompt => {
+        this.promptsCache.set(prompt.id, prompt);
+      });
+      
+      console.log(`✅ Loaded ${prompts.length} active prompts from database`);
+      return prompts;
     } catch (error) {
-      console.error('Failed to load all prompts:', error);
+      console.error('❌ Failed to load all prompts from database:', error);
       return [];
     }
   }
@@ -239,9 +248,16 @@ class PromptLoader {
     isActive: boolean;
   } | null> {
     try {
-      const index = await this.loadPromptIndex();
-      const promptInfo = index.prompts.find(p => p.id === promptId);
-      return promptInfo || null;
+      // Fetch from API
+      const letterType = await ApiService.getLetterType(promptId);
+      return {
+        id: letterType.id,
+        name: letterType.name,
+        description: letterType.description,
+        icon: letterType.icon,
+        category: letterType.category,
+        isActive: letterType.isActive
+      };
     } catch (error) {
       console.error(`Failed to get prompt metadata for ${promptId}:`, error);
       return null;

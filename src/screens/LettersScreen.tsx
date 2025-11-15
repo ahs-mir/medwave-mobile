@@ -11,8 +11,10 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
@@ -29,12 +31,18 @@ export const LettersScreen = () => {
   const [letters, setLetters] = useState<LetterFrontend[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'created' | 'approved' | 'posted'>('all');
   const [sortBy, setSortBy] = useState<'dateCreated' | 'dateUpdated' | 'patientName'>('dateCreated');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50; // Load 50 letters at a time
 
   // Filter and sort letters
   const filteredLetters = useMemo(() => {
@@ -143,10 +151,14 @@ export const LettersScreen = () => {
       console.log('👨‍⚕️ Fetching letters for doctor ID:', user.doctorId);
       
       try {
-        // Use ApiService instead of direct fetch
-        const fetchedLetters = await ApiService.getLetters();
+        // Use ApiService with pagination - load first page
+        const statusFilter = selectedFilter === 'all' ? undefined : selectedFilter;
+        const result = await ApiService.getLetters(statusFilter, undefined, 1, PAGE_SIZE);
         
-        setLetters(fetchedLetters);
+        setLetters(result.letters);
+        setCurrentPage(1);
+        setHasMore(result.pagination?.hasMore ?? false);
+        setTotalCount(result.pagination?.total ?? result.letters.length);
         setError(null);
       } catch (fetchError) {
         console.error('❌ Error fetching letters:', fetchError);
@@ -199,6 +211,39 @@ export const LettersScreen = () => {
       setError('Please log in to view letters');
     }
   }, [isAuthenticated, user]);
+
+  // Load more letters for infinite scroll
+  const loadMoreLetters = async () => {
+    if (loadingMore || !hasMore || loading) return;
+    
+    try {
+      setLoadingMore(true);
+      const nextPage = currentPage + 1;
+      const statusFilter = selectedFilter === 'all' ? undefined : selectedFilter;
+      const result = await ApiService.getLetters(statusFilter, undefined, nextPage, PAGE_SIZE);
+      
+      if (result.letters.length > 0) {
+        setLetters(prev => [...prev, ...result.letters]);
+        setCurrentPage(nextPage);
+        setHasMore(result.pagination?.hasMore ?? false);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('❌ Error loading more letters:', error);
+      // Don't show error to user, just stop loading more
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      fetchLetters();
+    }
+  }, [selectedFilter]);
 
   // Refresh letters when screen comes into focus (e.g., after deleting a letter)
   useFocusEffect(
@@ -383,9 +428,16 @@ export const LettersScreen = () => {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Letters</Text>
-        </View>
+        <LinearGradient
+          colors={['#FAFAFA', '#F5F5F5']}
+          style={styles.heroHeader}
+        >
+          <View style={styles.headerTop}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.greeting}>Letters</Text>
+            </View>
+          </View>
+        </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
           <Text style={styles.errorTitle}>Unable to Load Letters</Text>
@@ -401,18 +453,31 @@ export const LettersScreen = () => {
       if (filteredLetters.length === 0) {
         return (
           <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Letters</Text>
-              <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
-            </View>
+            {/* Hero Header */}
+            <LinearGradient
+              colors={['#FAFAFA', '#F5F5F5']}
+              style={styles.heroHeader}
+            >
+              <View style={styles.headerTop}>
+                <View style={styles.headerLeft}>
+                  <Text style={styles.greeting}>Letters</Text>
+                  <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.sortButton}
+                  onPress={() => setShowSortMenu(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="options" size={22} color="#000000" />
+                </TouchableOpacity>
+              </View>
 
-            {/* Search Input */}
-            <View style={styles.searchContainer}>
-              <View style={styles.searchInputContainer}>
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
                 <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search letters, patients, or content..."
+                  placeholder="Search letters or patients..."
                   placeholderTextColor="#9CA3AF"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -421,21 +486,20 @@ export const LettersScreen = () => {
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity
-                    style={styles.clearSearchButton}
+                    style={styles.clearButton}
                     onPress={() => setSearchQuery('')}
                   >
                     <Ionicons name="close-circle" size={20} color="#9CA3AF" />
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
 
-            {/* Filter Controls */}
-            <View style={styles.filterContainer}>
+              {/* Filter Chips */}
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.filterScrollContent}
+                style={styles.filterScroll}
               >
                 {[
                   { key: 'all', label: 'All', count: letters.length },
@@ -462,12 +526,12 @@ export const LettersScreen = () => {
                       {filter.label}
                     </Text>
                     <View style={[
-                      styles.filterChipCount,
-                      selectedFilter === filter.key && styles.filterChipCountActive
+                      styles.filterBadge,
+                      selectedFilter === filter.key && styles.filterBadgeActive
                     ]}>
                       <Text style={[
-                        styles.filterChipCountText,
-                        selectedFilter === filter.key && styles.filterChipCountTextActive
+                        styles.filterBadgeText,
+                        selectedFilter === filter.key && styles.filterBadgeTextActive
                       ]}>
                         {filter.count}
                       </Text>
@@ -475,7 +539,7 @@ export const LettersScreen = () => {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
+            </LinearGradient>
 
             <View style={styles.content}>
               <View style={styles.emptyState}>
@@ -500,28 +564,31 @@ export const LettersScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.title}>Letters</Text>
+      {/* Hero Header */}
+      <LinearGradient
+        colors={['#FAFAFA', '#F5F5F5']}
+        style={styles.heroHeader}
+      >
+        <View style={styles.headerTop}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>Letters</Text>
             <Text style={styles.subtitle}>{getLetterCountText(filteredLetters.length)}</Text>
           </View>
           <TouchableOpacity
             style={styles.sortButton}
             onPress={() => setShowSortMenu(true)}
+            activeOpacity={0.7}
           >
-            <Ionicons name="options-outline" size={24} color="#0F172A" />
+            <Ionicons name="options" size={22} color="#000000" />
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Search Input */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search letters, patients, or content..."
+            placeholder="Search letters or patients..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -530,21 +597,20 @@ export const LettersScreen = () => {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
-              style={styles.clearSearchButton}
+              style={styles.clearButton}
               onPress={() => setSearchQuery('')}
             >
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      {/* Filter Controls */}
-      <View style={styles.filterContainer}>
+        {/* Filter Chips */}
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScrollContent}
+          style={styles.filterScroll}
         >
           {[
             { key: 'all', label: 'All', count: letters.length },
@@ -571,12 +637,12 @@ export const LettersScreen = () => {
                 {filter.label}
               </Text>
               <View style={[
-                styles.filterChipCount,
-                selectedFilter === filter.key && styles.filterChipCountActive
+                styles.filterBadge,
+                selectedFilter === filter.key && styles.filterBadgeActive
               ]}>
                 <Text style={[
-                  styles.filterChipCountText,
-                  selectedFilter === filter.key && styles.filterChipCountTextActive
+                  styles.filterBadgeText,
+                  selectedFilter === filter.key && styles.filterBadgeTextActive
                 ]}>
                   {filter.count}
                 </Text>
@@ -584,7 +650,7 @@ export const LettersScreen = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </View>
+      </LinearGradient>
 
       <FlatList
         data={filteredLetters}
@@ -595,6 +661,15 @@ export const LettersScreen = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
+        onEndReached={loadMoreLetters}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#4F46E5" />
+            </View>
+          ) : null
+        }
       />
 
       {/* Sort/Filter Modal */}
@@ -672,68 +747,88 @@ export const LettersScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    padding: 20,
-    paddingTop: 40,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  headerContent: {
+  
+  // Hero Header
+  heroHeader: {
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 0 : 20,
+    paddingBottom: 24,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 20,
   },
-  sortButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  headerLeft: {
+    flex: 1,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.5,
+  greeting: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    marginTop: 6,
+    fontSize: 14,
+    color: '#9CA3AF',
     fontWeight: '500',
   },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+  sortButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  searchInputContainer: {
+  
+  // Search Bar
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
+    paddingVertical: 16,
     fontSize: 16,
-    color: '#0F172A',
-    paddingVertical: 4,
+    color: '#000000',
+    fontWeight: '400',
   },
-  clearSearchButton: {
-    marginLeft: 8,
-    padding: 2,
+  clearButton: {
+    padding: 4,
   },
   content: {
     flex: 1,
@@ -759,78 +854,77 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#0F172A',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#000000',
     marginTop: 16,
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
   errorDescription: {
     fontSize: 16,
-    color: '#64748B',
+    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: '#000000',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   emptyState: {
     alignItems: 'center',
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#0F172A',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#000000',
     marginTop: 16,
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
   emptyDescription: {
     fontSize: 16,
-    color: '#64748B',
+    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
   },
   lettersList: {
     paddingHorizontal: 0,
     paddingBottom: 40,
-    backgroundColor: '#F8FAFC',
+    paddingTop: 8,
   },
   letterListItem: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 2,
-    marginHorizontal: 0,
+    borderRadius: 0,
+    padding: 20,
+    marginBottom: 0,
+    marginHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
-    borderTopWidth: 0,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    borderBottomColor: '#F3F4F6',
   },
   listItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
   },
   listInfoSection: {
     flex: 1,
@@ -840,23 +934,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   listPatientName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: '#000000',
     flex: 1,
+    letterSpacing: -0.2,
   },
   listLetterType: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
-    marginBottom: 1,
+    marginBottom: 4,
   },
   listDate: {
     fontSize: 13,
-    color: '#6B7280',
+    color: '#9CA3AF',
     fontWeight: '500',
   },
   listStatusSection: {
@@ -866,78 +961,81 @@ const styles = StyleSheet.create({
     minWidth: 20,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   listArrowSection: {
-    marginLeft: 6,
+    marginLeft: 12,
   },
-  filterContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  // Filter Chips
+  filterScroll: {
+    flexGrow: 0,
   },
   filterScrollContent: {
-    alignItems: 'center',
-    paddingRight: 20,
+    paddingRight: 24,
+    gap: 12,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    minWidth: 80,
-    justifyContent: 'center',
+    gap: 8,
   },
   filterChipActive: {
-    backgroundColor: '#0F172A',
-    borderColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   filterChipText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#64748B',
-    textAlign: 'center',
+    color: '#9CA3AF',
+    letterSpacing: -0.2,
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
-  },
-  filterChipCount: {
-    backgroundColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginLeft: 8,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  filterChipCountActive: {
-    backgroundColor: '#475569',
-  },
-  filterChipCountText: {
-    fontSize: 11,
+    color: '#000000',
     fontWeight: '700',
-    color: '#475569',
-    textAlign: 'center',
   },
-  filterChipCountTextActive: {
+  filterBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadgeActive: {
+    backgroundColor: '#000000',
+  },
+  filterBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  filterBadgeTextActive: {
     color: '#FFFFFF',
   },
   // Modal Styles

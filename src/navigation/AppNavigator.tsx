@@ -7,14 +7,16 @@ import { ActivityIndicator, View } from 'react-native';
 
 // Import your screens
 import { LoginScreen } from '../screens/auth/LoginScreen';
-// import RegisterScreen from '../screens/auth/RegisterScreen';
+import { RegisterScreen } from '../screens/auth/RegisterScreen';
+import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import DoctorRegistrationScreen from '../screens/auth/DoctorRegistrationScreen';
 import { AppStackNavigator } from './AppStackNavigator';
 
 // Define types for navigation stacks if needed
 export type AuthStackParamList = {
   Login: undefined;
-  // Register: undefined;
+  Register: undefined;
+  ForgotPassword: undefined;
   DoctorRegistration: undefined;
 };
 
@@ -23,7 +25,8 @@ const AuthStack = createStackNavigator<AuthStackParamList>();
 const AuthStackScreen = () => (
   <AuthStack.Navigator screenOptions={{ headerShown: false }}>
     <AuthStack.Screen name="Login" component={LoginScreen} />
-    {/* <AuthStack.Screen name="Register" component={RegisterScreen} /> */}
+    <AuthStack.Screen name="Register" component={RegisterScreen} />
+    <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     <AuthStack.Screen name="DoctorRegistration" component={DoctorRegistrationScreen} />
   </AuthStack.Navigator>
 );

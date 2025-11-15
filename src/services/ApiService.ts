@@ -254,10 +254,159 @@ class ApiService {
     }
   }
 
+  async register(data: { firstName: string; lastName: string; email: string; password: string; role: string; specialization?: string }): Promise<ApiResponse<{ user: UserFrontend; token: string }>> {
+    try {
+      const response = await this.request('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+
+      if (response.success && response.token) {
+        await this.setToken(response.token);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('❌ Registration failed:', error);
+      throw error;
+    }
+  }
+
   async logout(): Promise<void> {
     this.token = null;
     await AsyncStorage.removeItem(this.TOKEN_KEY);
     console.log('🚪 Logged out, token cleared');
+  }
+
+  // OAuth Authentication Methods
+
+  /**
+   * Login/Register with Google OAuth
+   * @param idToken Google ID token from OAuthService
+   * @param role Optional role for new users (doctor/secretary)
+   * @param specialization Optional specialization for doctors
+   */
+  async loginWithGoogle(idToken: string, role?: string, specialization?: string): Promise<ApiResponse<{ user: UserFrontend; token: string }>> {
+    try {
+      const requestBody: any = { idToken };
+      if (role) {
+        requestBody.role = role;
+      }
+      if (specialization) {
+        requestBody.specialization = specialization;
+      }
+
+      const response = await this.request('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.success && response.token) {
+        await this.setToken(response.token);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('❌ Google OAuth login failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Login/Register with Apple Sign-In
+   * @param identityToken Apple identity token from OAuthService
+   * @param userIdentifier Apple user identifier
+   * @param email Optional email (may not be provided on subsequent logins)
+   * @param fullName Optional full name object from Apple
+   * @param role Optional role for new users (doctor/secretary)
+   * @param specialization Optional specialization for doctors
+   */
+  async loginWithApple(
+    identityToken: string,
+    userIdentifier: string,
+    email?: string | null,
+    fullName?: { givenName?: string; familyName?: string } | null,
+    role?: string,
+    specialization?: string
+  ): Promise<ApiResponse<{ user: UserFrontend; token: string }>> {
+    try {
+      const requestBody: any = {
+        identityToken,
+        userIdentifier,
+      };
+      
+      if (email) {
+        requestBody.email = email;
+      }
+      
+      if (fullName) {
+        requestBody.fullName = fullName;
+      }
+      
+      if (role) {
+        requestBody.role = role;
+      }
+      
+      if (specialization) {
+        requestBody.specialization = specialization;
+      }
+
+      const response = await this.request('/auth/apple', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.success && response.token) {
+        await this.setToken(response.token);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('❌ Apple OAuth login failed:', error);
+      throw error;
+    }
+  }
+
+  async deleteAccount(): Promise<ApiResponse<{}>> {
+    try {
+      const response = await this.request('/auth/account', {
+        method: 'DELETE',
+      });
+      
+      // Clear token after successful deletion
+      await this.setToken(null);
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Account deletion failed:', error);
+      throw error;
+    }
+  }
+
+  async forgotPassword(email: string): Promise<ApiResponse<{ resetCode?: string }>> {
+    try {
+      const response = await this.request('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return response;
+    } catch (error) {
+      console.error('❌ Forgot password failed:', error);
+      throw error;
+    }
+  }
+
+  async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<{}>> {
+    try {
+      const response = await this.request('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, code, newPassword }),
+      });
+      return response;
+    } catch (error) {
+      console.error('❌ Reset password failed:', error);
+      throw error;
+    }
   }
 
   // Patients
@@ -377,7 +526,7 @@ class ApiService {
   }
 
   // Letters
-  async getLetters(status?: string, patientId?: number): Promise<LetterFrontend[]> {
+  async getLetters(status?: string, patientId?: number, page?: number, limit?: number): Promise<{ letters: LetterFrontend[], pagination?: any }> {
     try {
       let endpoint = '/letters';
       const params = new URLSearchParams();
@@ -388,6 +537,13 @@ class ApiService {
       if (patientId) {
         params.append('patientId', patientId.toString());
       }
+      // Add pagination parameters
+      if (page) {
+        params.append('page', page.toString());
+      }
+      if (limit) {
+        params.append('limit', limit.toString());
+      }
       
       if (params.toString()) {
         endpoint += `?${params.toString()}`;
@@ -396,7 +552,7 @@ class ApiService {
       const response = await this.request(endpoint);
       
       if (response.success && response.letters) {
-        return response.letters.map((letter: any) => {
+        const letters = response.letters.map((letter: any) => {
           const workflowInfo = getWorkflowStep(letter.status);
           
           // Try to extract patient name from various possible sources
@@ -416,7 +572,7 @@ class ApiService {
             patientName: patientName,
             status: letter.status,
             type: letter.type,
-            content: letter.content,
+            content: letter.content, // May be null for list view (optimized)
             rawTranscription: letter.raw_transcription || letter.rawTranscription,
             createdAt: letter.created_at || letter.createdAt,
             updatedAt: letter.updated_at || letter.updatedAt,
@@ -424,9 +580,14 @@ class ApiService {
             workflowStepNumber: workflowInfo.number
           };
         });
+        
+        return {
+          letters,
+          pagination: response.pagination
+        };
       }
       
-      return [];
+      return { letters: [] };
     } catch (error) {
       console.error('❌ Error fetching letters:', error);
       throw error;
@@ -436,7 +597,8 @@ class ApiService {
   // Get letters for a specific patient
   async getPatientLetters(patientId: number): Promise<LetterFrontend[]> {
     try {
-      return await this.getLetters(undefined, patientId);
+      const result = await this.getLetters(undefined, patientId);
+      return result.letters;
     } catch (error) {
       console.error('❌ Error fetching patient letters:', error);
       throw error;

@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import * as Haptics from 'expo-haptics';
+import OAuthService from '../../services/OAuthService';
 import { DEV_USER_EMAIL, DEV_USER_PASSWORD, DEV_QUICK_LOGIN_ENABLED } from '@env';
 
 export const LoginScreen = ({ navigation }: any) => {
@@ -26,8 +27,9 @@ export const LoginScreen = ({ navigation }: any) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isAppleAvailable, setIsAppleAvailable] = useState(false);
   
-  const { login } = useAuth();
+  const { login, loginWithGoogle, loginWithApple } = useAuth();
 
   // Keyboard event listeners
   useEffect(() => {
@@ -45,6 +47,17 @@ export const LoginScreen = ({ navigation }: any) => {
       keyboardDidShowListener?.remove();
       keyboardDidHideListener?.remove();
     };
+  }, []);
+
+  // Check if Apple Sign-In is available (iOS 13+)
+  useEffect(() => {
+    const checkAppleAvailability = async () => {
+      if (Platform.OS === 'ios') {
+        const available = await OAuthService.isAppleSignInAvailable();
+        setIsAppleAvailable(available);
+      }
+    };
+    checkAppleAvailability();
   }, []);
 
   // Dismiss keyboard when tapping outside
@@ -76,6 +89,66 @@ export const LoginScreen = ({ navigation }: any) => {
       }
     } catch (error) {
       Alert.alert('Connection Error', 'Could not connect to server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // OAuth login handlers
+  const handleGoogleLogin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    
+    try {
+      const result = await loginWithGoogle();
+      
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        console.log('Google login successful');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (result.requiresRole) {
+          // If role is required, navigate to role selection
+          Alert.alert('Complete Registration', 'Please select your role to complete registration', [
+            { text: 'OK', onPress: () => navigation.navigate('Register', { provider: 'google' }) }
+          ]);
+        } else {
+          Alert.alert('Google Login Failed', result.error || 'Failed to login with Google');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    
+    try {
+      const result = await loginWithApple();
+      
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        console.log('Apple login successful');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (result.requiresRole) {
+          Alert.alert('Complete Registration', 'Please select your role to complete registration', [
+            { text: 'OK', onPress: () => navigation.navigate('Register', { provider: 'apple' }) }
+          ]);
+        } else if (result.requiresEmail) {
+          Alert.alert('Email Required', 'Please provide your email to complete registration', [
+            { text: 'OK', onPress: () => navigation.navigate('Register', { provider: 'apple' }) }
+          ]);
+        } else {
+          Alert.alert('Apple Login Failed', result.error || 'Failed to login with Apple');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not connect to server.');
     } finally {
       setIsLoading(false);
     }
@@ -115,111 +188,67 @@ export const LoginScreen = ({ navigation }: any) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* Background Pattern */}
-      <View style={styles.backgroundPattern}>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-        <View style={styles.patternRow}>
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-          <View style={styles.patternDot} />
-        </View>
-      </View>
-
-      <KeyboardAvoidingView 
-        behavior="height"
-        style={styles.keyboardView}
-        keyboardVerticalOffset={0}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <TouchableOpacity 
-            style={styles.content}
-            activeOpacity={1}
-            onPress={dismissKeyboard}
-          >
-          <View style={styles.header}>
-            <Text style={styles.title}>MedWave</Text>
-            <Text style={styles.subtitle}>Medical Assistant</Text>
+        {/* Hero Section */}
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>MedWave</Text>
+          <Text style={styles.heroSubtitle}>Medical letter management for healthcare professionals</Text>
+        </View>
+
+        {/* Form */}
+        <View style={styles.form}>
+          {/* Email */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="your@email.com"
+              placeholderTextColor="#9CA3AF"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+              returnKeyType="next"
+            />
           </View>
 
-          <View style={styles.form}>
-            <Text style={styles.formTitle}>Sign In</Text>
-            
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Email address"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
+          {/* Password */}
+          <View style={styles.inputGroup}>
+            <View style={styles.passwordLabelContainer}>
+              <Text style={styles.label}>Password</Text>
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('ForgotPassword')}
+                disabled={isLoading}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              </TouchableOpacity>
             </View>
-
-            <View style={styles.inputContainer}>
+            <View style={styles.passwordContainer}>
               <TextInput
-                style={styles.input}
-                placeholder="Password"
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor="#9CA3AF"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!isLoading}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
               />
               <TouchableOpacity 
                 onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
+                style={styles.eyeButton}
                 disabled={isLoading}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons 
                   name={showPassword ? "eye-outline" : "eye-off-outline"} 
@@ -228,51 +257,97 @@ export const LoginScreen = ({ navigation }: any) => {
                 />
               </TouchableOpacity>
             </View>
+          </View>
 
-            <TouchableOpacity 
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Development Quick Login Button */}
-            {DEV_QUICK_LOGIN_ENABLED === 'true' && __DEV__ && (
-              <View style={styles.devSection}>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>Development</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-                
-                <TouchableOpacity 
-                  style={[styles.quickLoginButton, isLoading && styles.quickLoginButtonDisabled]}
-                  onPress={handleQuickLogin}
-                  disabled={isLoading}
-                >
-                  <Ionicons name="flash" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.quickLoginButtonText}>Quick Login as Rizwan</Text>
-                </TouchableOpacity>
-                
-                <Text style={styles.devNote}>
-                  Development mode: Uses pre-configured credentials
-                </Text>
-              </View>
+          {/* Sign In Button */}
+          <TouchableOpacity 
+            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+            onPress={handleLogin}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.loginButtonText}>Sign In</Text>
             )}
-
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.versionText}>Version 1.0.0</Text>
-          </View>
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          {/* OAuth Buttons */}
+          {(true || isAppleAvailable) && (
+            <View style={styles.oauthSection}>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Google Sign-In */}
+              <TouchableOpacity 
+                style={[styles.oauthButton, styles.googleButton, isLoading && styles.oauthButtonDisabled]}
+                onPress={handleGoogleLogin}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-google" size={20} color="#4285F4" style={{ marginRight: 12 }} />
+                <Text style={styles.googleButtonText}>Sign in with Google</Text>
+              </TouchableOpacity>
+
+              {isAppleAvailable && (
+                <TouchableOpacity 
+                  style={[styles.oauthButton, styles.appleButton, isLoading && styles.oauthButtonDisabled]}
+                  onPress={handleAppleLogin}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="logo-apple" size={20} color="#FFFFFF" style={{ marginRight: 12 }} />
+                  <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Create Account Link */}
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>Don't have an account? </Text>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Register')}
+              disabled={isLoading}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.signupLink}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Development Quick Login Button */}
+          {DEV_QUICK_LOGIN_ENABLED === 'true' && __DEV__ && (
+            <View style={styles.devSection}>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>Development</Text>
+                <View style={styles.dividerLine} />
+              </View>
+              
+              <TouchableOpacity 
+                style={[styles.quickLoginButton, isLoading && styles.quickLoginButtonDisabled]}
+                onPress={handleQuickLogin}
+                disabled={isLoading}
+              >
+                <Ionicons name="flash" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.quickLoginButtonText}>Quick Login as Rizwan</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.devNote}>
+                Development mode: Uses pre-configured credentials
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.versionText}>Version 1.0.0</Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -280,110 +355,119 @@ export const LoginScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
-  backgroundPattern: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.08,
-  },
-  patternRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 30,
-  },
-  patternDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#000000',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
-    minHeight: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 32,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    minHeight: '100%',
+  hero: {
+    marginBottom: 48,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-    paddingTop: 20,
+  heroTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 12,
+    letterSpacing: -0.5,
   },
-  title: {
-    fontSize: 28,
+  heroSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    lineHeight: 22,
+  },
+  form: {
+    gap: 20,
+  },
+  inputGroup: {
+    gap: 8,
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  subtitle: {
+  passwordLabelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  input: {
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
     fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+    paddingVertical: 0,
+  },
+  eyeButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
   },
-  form: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111827',
-  },
-  eyeIcon: {
-    padding: 4,
-  },
   loginButton: {
+    height: 52,
     backgroundColor: '#000000',
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
-    marginBottom: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   loginButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    opacity: 0.5,
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  signupContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 32,
+    paddingVertical: 8,
+  },
+  signupText: {
+    fontSize: 15,
+    color: '#6B7280',
+  },
+  signupLink: {
+    fontSize: 15,
+    color: '#000000',
     fontWeight: '600',
   },
   devSection: {
@@ -395,7 +479,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginVertical: 4,
   },
   dividerLine: {
     flex: 1,
@@ -404,7 +488,7 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: 16,
-    fontSize: 12,
+    fontSize: 13,
     color: '#9CA3AF',
     fontWeight: '500',
     textTransform: 'uppercase',
@@ -435,11 +519,45 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    marginTop: 24,
-    paddingBottom: 20,
+    marginTop: 32,
+    paddingBottom: 16,
   },
   versionText: {
     fontSize: 12,
     color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  oauthSection: {
+    gap: 12,
+    marginTop: 16,
+  },
+  oauthButton: {
+    height: 50,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  oauthButtonDisabled: {
+    opacity: 0.5,
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D1D5DB',
+  },
+  googleButtonText: {
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  appleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
