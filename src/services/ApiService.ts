@@ -2,11 +2,11 @@
 import Constants from 'expo-constants';
 import { API_BASE_URL } from '@env';
 
-// Priority: expo-constants (set in app.config.js) > .env file > hardcoded fallback
+// Priority: expo-constants (set in app.config.js) > .env file > production fallback
 const BASE_URL =
   Constants.expoConfig?.extra?.apiBaseUrl ||
   API_BASE_URL ||
-  'https://slippery-glass-production.up.railway.app/api';
+  'https://slippery-glass-production.up.railway.app/api'; // Production fallback
 
 // Log the resolved BASE_URL for debugging
 console.log('🔧 BASE_URL configured:', BASE_URL);
@@ -187,6 +187,32 @@ class ApiService {
     }
   }
 
+  // Get doctor-specific letter template by ID (with customizations)
+  async getDoctorLetterType(id: string): Promise<any> {
+    try {
+      const response = await this.request(`/letter-types/doctor/${id}`, {
+        method: 'GET'
+      });
+      return response.template || response;
+    } catch (error) {
+      console.error(`Error fetching doctor letter type ${id} from API:`, error);
+      throw error;
+    }
+  }
+
+  // Get all doctor-specific letter templates (with customizations and enabled status)
+  async getDoctorLetterTypes(): Promise<any[]> {
+    try {
+      const response = await this.request('/letter-types/doctor', {
+        method: 'GET'
+      });
+      return response.templates || response;
+    } catch (error) {
+      console.error('Error fetching doctor letter types from API:', error);
+      throw error;
+    }
+  }
+
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${BASE_URL}${endpoint}`;
     const config: RequestInit = {
@@ -208,8 +234,29 @@ class ApiService {
       console.log(`📡 Response Status: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        let errorData: any = {};
+        try {
+          const text = await response.text();
+          errorData = text ? JSON.parse(text) : {};
+        } catch (e) {
+          // If JSON parsing fails, use empty object
+          errorData = {};
+        }
+        
+        // Check for 404 specifically - this usually means route not found
+        if (response.status === 404) {
+          console.error(`❌ Route not found: ${url}`);
+          console.error(`❌ Check if backend is running and endpoint exists: ${url}`);
+          throw new Error(errorData.error || `Route not found: ${endpoint}`);
+        }
+        
+        // Extract error message - check multiple possible fields
+        const errorMessage = errorData.error || 
+                           errorData.message || 
+                           errorData.details?.map((d: any) => d.msg || d.message).join(', ') ||
+                           `HTTP ${response.status}: ${response.statusText}`;
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -238,18 +285,31 @@ class ApiService {
   // Authentication
   async login(email: string, password: string): Promise<ApiResponse<{ user: UserFrontend; token: string }>> {
     try {
+      console.log('🌐 Calling login API:', BASE_URL + '/auth/login');
       const response = await this.request('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
 
+      console.log('📥 Login API response:', {
+        success: response.success,
+        hasUser: !!response.user,
+        hasToken: !!response.token,
+        error: response.error
+      });
+
       if (response.success && response.token) {
         await this.setToken(response.token);
+        console.log('✅ Token saved successfully');
       }
 
       return response;
     } catch (error) {
-      console.error('❌ Login failed:', error);
+      console.error('❌ Login API call failed:', error);
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        type: error instanceof TypeError ? 'Network error' : 'Other error'
+      });
       throw error;
     }
   }
@@ -526,6 +586,19 @@ class ApiService {
   }
 
   // Letters
+  // Get letter counts by status (lightweight endpoint for tab display)
+  async getLetterCounts(): Promise<{ all: number; created: number; draft: number; approved: number; posted: number }> {
+    try {
+      const response = await this.request('/letters/counts', {
+        method: 'GET'
+      });
+      return response.counts || { all: 0, created: 0, draft: 0, approved: 0, posted: 0 };
+    } catch (error) {
+      console.error('Error fetching letter counts:', error);
+      return { all: 0, created: 0, draft: 0, approved: 0, posted: 0 };
+    }
+  }
+
   async getLetters(status?: string, patientId?: number, page?: number, limit?: number): Promise<{ letters: LetterFrontend[], pagination?: any }> {
     try {
       let endpoint = '/letters';
@@ -594,6 +667,48 @@ class ApiService {
     }
   }
 
+  // Get a single letter by ID (includes full content)
+  async getLetter(letterId: number): Promise<LetterFrontend> {
+    try {
+      const response = await this.request(`/letters/${letterId}`);
+      
+      if (response.success && response.letter) {
+        const letter = response.letter;
+        const workflowInfo = getWorkflowStep(letter.status);
+        
+        // Try to extract patient name from various possible sources
+        let patientName = letter.patientName || 
+                         letter.patient_name || 
+                         letter.patient?.name || 
+                         letter.patient?.fullName ||
+                         (letter.patient?.firstName && letter.patient?.lastName ? 
+                           `${letter.patient.firstName} ${letter.patient.lastName}` : null) ||
+                         'Unknown Patient';
+        
+        return {
+          id: letter.id,
+          doctorId: letter.doctor_id || letter.doctorId,
+          patientId: letter.patient_id || letter.patientId,
+          secretaryId: letter.secretary_id || letter.secretaryId,
+          patientName: patientName,
+          status: letter.status,
+          type: letter.type,
+          content: letter.content, // Full content included
+          rawTranscription: letter.raw_transcription || letter.rawTranscription,
+          createdAt: letter.created_at || letter.createdAt,
+          updatedAt: letter.updated_at || letter.updatedAt,
+          workflowStep: workflowInfo.step,
+          workflowStepNumber: workflowInfo.number
+        };
+      }
+      
+      throw new Error(response.error || 'Letter not found');
+    } catch (error) {
+      console.error('❌ Error fetching letter:', error);
+      throw error;
+    }
+  }
+
   // Get letters for a specific patient
   async getPatientLetters(patientId: number): Promise<LetterFrontend[]> {
     try {
@@ -605,11 +720,44 @@ class ApiService {
     }
   }
 
+  // Get patient letters count (lightweight endpoint for tab display)
+  async getPatientLettersCount(patientId: number): Promise<number> {
+    try {
+      const response = await this.request(`/patients/${patientId}/letters/count`, {
+        method: 'GET'
+      });
+      return response.count || 0;
+    } catch (error) {
+      console.error(`Error fetching patient letters count for ${patientId}:`, error);
+      return 0; // Return 0 on error to avoid breaking UI
+    }
+  }
+
   async createLetter(letterData: CreateLetterRequest): Promise<LetterFrontend> {
     try {
+      console.log('📤 Creating letter with data:', {
+        patientId: letterData.patientId,
+        type: letterData.type,
+        contentLength: letterData.content?.length || 0,
+        contentPreview: letterData.content?.substring(0, 300) + '...',
+        hasRawTranscription: !!letterData.rawTranscription
+      });
+
       const response = await this.request('/letters', {
         method: 'POST',
         body: JSON.stringify(letterData),
+      });
+      
+      console.log('✅ Letter created successfully:', {
+        id: response.letter?.id,
+        savedContentLength: response.letter?.content?.length || 0,
+        savedContentPreview: response.letter?.content?.substring(0, 300) + '...'
+      });
+
+      console.log('📥 Letter creation response:', {
+        success: response.success,
+        hasLetter: !!response.letter,
+        error: response.error
       });
 
       if (response.success && response.letter) {
@@ -641,10 +789,19 @@ class ApiService {
         };
       }
       
-      throw new Error(response.error || 'Failed to create letter');
+      // If response doesn't have success or letter, extract error details
+      const errorMsg = response.error || 
+                      response.details?.map((d: any) => d.msg || d.message).join(', ') ||
+                      'Failed to create letter';
+      console.error('❌ Letter creation failed:', errorMsg);
+      throw new Error(errorMsg);
     } catch (error) {
       console.error('❌ Error creating letter:', error);
-      throw error;
+      // Re-throw with better error message if needed
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(error instanceof Error ? error.message : 'Failed to create letter');
     }
   }
 
@@ -725,7 +882,9 @@ class ApiService {
   // User profile management
   async getCurrentUser(): Promise<UserFrontend | null> {
     try {
+      console.log('👤 Fetching current user profile...');
       const response = await this.request('/users/profile');
+      console.log('📥 User profile response:', { success: response.success, hasUser: !!response.user });
       
       if (response.success && response.user) {
         const user = response.user;

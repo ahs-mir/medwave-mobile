@@ -5,11 +5,11 @@ import ApiService from "../services/ApiService";
 import Constants from 'expo-constants';
 import { API_BASE_URL } from '@env';
 
-// Priority: expo-constants (set in app.config.js) > .env file > hardcoded fallback
+// Priority: expo-constants (set in app.config.js) > .env file > production fallback
 const BASE_URL =
   Constants.expoConfig?.extra?.apiBaseUrl ||
   API_BASE_URL ||
-  'https://slippery-glass-production.up.railway.app/api';
+  'https://slippery-glass-production.up.railway.app/api'; // Production fallback
 
 type ChunkHandler = (text: string) => void;
 
@@ -44,7 +44,7 @@ export async function streamLetterGeneration(
       prompt,
       patientInfo: patientContext,
       letterType,
-      model: "gpt-4o-mini",
+      // Model is now configured in backend app_settings - don't override it
       systemRole: systemRole || undefined
     });
 
@@ -77,7 +77,9 @@ export async function streamLetterGeneration(
         }
 
         if (json.isComplete) {
-          console.log('✅ Backend streaming completed');
+          const modelUsed = json.model || 'unknown';
+          const modelSource = json.modelSource || 'unknown';
+          console.log(`✅ Backend streaming completed using AI Model: ${modelUsed} (from ${modelSource})`);
           onComplete("Stream completed");
           es.close();
           return;
@@ -109,23 +111,31 @@ export async function streamLetterGeneration(
 }
 
 // Export streamOpenAI function for backward compatibility with SimpleStreamingService
-export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => void {
-  const { prompt, onToken, onEnd, onError, model = 'gpt-4o-mini', systemRole } = args;
+// Use EventSource for proper SSE support instead of XMLHttpRequest polling
+export function streamOpenAI(args: StreamArgs & { systemRole?: string; patientInfo?: any; letterType?: string }): () => void {
+  // Model is now configured in backend app_settings - don't override it
+  const { prompt, onToken, onEnd, onError, systemRole, patientInfo, letterType } = args;
   
-  console.log('🚀 streamOpenAI called with:', { promptLength: prompt.length, model, hasSystemRole: !!systemRole });
+  console.log('🚀 streamOpenAI called with:', { 
+    promptLength: prompt.length, 
+    hasSystemRole: !!systemRole, 
+    hasPatientInfo: !!patientInfo,
+    letterType: letterType || 'consultation',
+    note: 'Using EventSource for SSE streaming' 
+  });
   
   let isActive = true;
-  let xhr: XMLHttpRequest | null = null;
+  let es: EventSource | null = null;
 
   const cleanup = () => {
     isActive = false;
-    if (xhr) {
-      xhr.abort();
-      xhr = null;
+    if (es) {
+      es.close();
+      es = null;
     }
   };
 
-  // Start the streaming process
+  // Start the streaming process using EventSource (proper SSE support)
   (async () => {
     try {
       // Get auth token for backend API
@@ -137,155 +147,71 @@ export function streamOpenAI(args: StreamArgs & { systemRole?: string }): () => 
       // Use backend streaming endpoint
       const url = `${BASE_URL}/ai/generate-letter-stream`;
 
-      const body = JSON.stringify({
+      // Use provided patientInfo and letterType, or fallback to defaults
+      const requestBody = JSON.stringify({
         prompt,
-        patientInfo: "",
-        letterType: "consultation",
-        model,
+        patientInfo: patientInfo || { name: 'Patient' },
+        letterType: letterType || 'consultation',
         systemRole: systemRole || undefined
       });
 
-      console.log('🚀 streamOpenAI: Starting XMLHttpRequest streaming connection');
-
-      xhr = new XMLHttpRequest();
-      let receivedLength = 0;
-      let buffer = '';
-
-      xhr.open('POST', url, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Accept', 'text/event-stream');
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
-      // React Native XMLHttpRequest doesn't reliably fire onprogress for streaming
-      // Use a polling approach instead
-      const pollResponse = () => {
-        if (!isActive || !xhr) return;
-
-        const currentLength = xhr.responseText.length;
-        if (currentLength > receivedLength) {
-          // Extract only new data since last update
-          const newData = xhr.responseText.substring(receivedLength);
-          receivedLength = currentLength;
-          buffer += newData;
-
-          console.log(`📥 Received ${newData.length} new chars, total: ${currentLength}`);
-
-          // Process complete lines (SSE format)
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-          lines.forEach((line) => {
-            if (!isActive) return;
-            
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6); // Remove 'data: ' prefix
-              
-              if (!data.trim()) return;
-              
-              try {
-                const json = JSON.parse(data);
-                
-                if (!json.success) {
-                  console.error('❌ streamOpenAI: Backend streaming error:', json.error);
-                  if (onError) onError(json.error || 'Backend streaming failed');
-                  cleanup();
-                  return;
-                }
-
-                if (json.isComplete) {
-                  console.log('✅ streamOpenAI: Backend streaming completed');
-                  if (onEnd) onEnd();
-                  cleanup();
-                  return;
-                }
-
-                // Handle backend streaming format
-                const text: string = json.content || "";
-
-                if (text && onToken) {
-                  console.log(`🔥 streamOpenAI: Token received: "${text}" (${text.length} chars)`);
-                  onToken(text);
-                }
-              } catch (parseError) {
-                console.log('🔍 streamOpenAI: JSON parse error (likely keepalive):', parseError);
-              }
-            }
-          });
-        }
-
-        // Continue polling if request is still active
-        if (xhr && xhr.readyState !== 4 && isActive) {
-          setTimeout(pollResponse, 100); // Poll every 100ms
-        }
+      const headers: Record<string, any> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${token}`,
       };
 
-      // Start polling after a short delay to let the request begin
-      setTimeout(pollResponse, 200);
+      console.log('🚀 streamOpenAI: Starting EventSource streaming connection');
 
-      xhr.onprogress = () => {
-        // Fallback: if onprogress does fire, also trigger polling
-        if (isActive) pollResponse();
-      };
-
-      xhr.onloadend = () => {
-        if (!isActive || !xhr) return;
-
-        // Process any remaining data in buffer
-        if (buffer.trim()) {
-          const line = buffer.trim();
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data.trim()) {
-              try {
-                const json = JSON.parse(data);
-                if (json.isComplete) {
-                  console.log('✅ streamOpenAI: Stream completed via onloadend');
-                  if (onEnd) onEnd();
-                }
-              } catch (parseError) {
-                console.log('🔍 Final buffer parse error:', parseError);
-              }
-            }
-          }
-        }
-
-        if (onEnd && isActive) {
-          console.log('✅ streamOpenAI: Stream completed');
-          onEnd();
-        }
-        cleanup();
-      };
-
-      xhr.onerror = () => {
-        if (!isActive || !xhr) return;
-        
-        console.error('❌ streamOpenAI: XMLHttpRequest error');
-        if (onError) onError('Network error occurred');
-        cleanup();
-      };
-
-      xhr.onreadystatechange = () => {
-        if (!isActive || !xhr) return;
-        
-        if (xhr.readyState === 4) {
-          if (xhr.status !== 200) {
-            console.error(`❌ streamOpenAI: HTTP ${xhr.status}: ${xhr.statusText}`);
-            if (onError) onError(`HTTP ${xhr.status}: ${xhr.statusText}`);
-            cleanup();
-          }
-        }
-      };
-
-      // Send the request
-      const requestBody = JSON.stringify({
-        prompt,
-        patientInfo: { name: 'Patient' }, // Default patient info
-        letterType: 'consultation',
-        model
+      es = new EventSource(url, {
+        method: "POST",
+        headers,
+        body: requestBody,
       });
 
-      console.log('📤 streamOpenAI: Sending request...');
-      xhr.send(requestBody);
+      es.addEventListener("message", (evt) => {
+        if (!isActive) return;
+        
+        try {
+          const data = evt?.data;
+          if (!data) return;
+          
+          const json = JSON.parse(data);
+          
+          if (!json.success) {
+            console.error('❌ streamOpenAI: Backend streaming error:', json.error);
+            if (onError) onError(json.error || 'Backend streaming failed');
+            cleanup();
+            return;
+          }
+
+          if (json.isComplete) {
+            console.log('✅ streamOpenAI: Stream completed');
+            if (onEnd) onEnd();
+            cleanup();
+            return;
+          }
+
+          // Handle backend streaming format
+          const text: string = json.content || "";
+
+          if (text && onToken) {
+            onToken(text);
+          }
+        } catch (error) {
+          // ignore keepalives/comments that aren't JSON
+          console.log('🔍 streamOpenAI: SSE parse error (likely keepalive):', error);
+        }
+      });
+
+      es.addEventListener("error", (e) => {
+        if (!isActive) return;
+        
+        const errorMessage = e instanceof ErrorEvent ? e.message : 'Stream error occurred';
+        console.error('❌ streamOpenAI: EventSource error:', errorMessage);
+        if (onError) onError(errorMessage);
+        cleanup();
+      });
 
     } catch (error) {
       if (!isActive) return;

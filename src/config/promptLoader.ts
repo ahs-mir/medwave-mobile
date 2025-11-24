@@ -97,8 +97,8 @@ class PromptLoader {
     try {
       console.log(`🌐 Fetching prompt from database API: ${promptId}`);
       
-      // Fetch from backend API
-      const apiData = await ApiService.getLetterType(promptId);
+      // Fetch from backend API using doctor endpoint (includes customizations)
+      const apiData = await ApiService.getDoctorLetterType(promptId);
       
       // Map backend field names to frontend format
       const promptData: PromptConfig = {
@@ -107,7 +107,7 @@ class PromptLoader {
         description: apiData.description,
         icon: apiData.icon,
         systemRole: apiData.systemRole,
-        userPrompt: apiData.userPrompt,
+        userPrompt: apiData.userPrompt, // This will be customized prompt if doctor has one, otherwise base prompt
         temperature: apiData.temperature,
         maxTokens: apiData.maxTokens,
         version: apiData.version,
@@ -143,17 +143,18 @@ class PromptLoader {
 
   /**
    * Load all active prompts from database API
+   * Filters by isEnabledForUser to only show letter types the doctor has enabled
    */
   async loadAllPrompts(): Promise<PromptConfig[]> {
     try {
       console.log('🌐 Fetching all letter types from database API...');
       
-      // Fetch all letter types from backend
-      const apiData = await ApiService.getLetterTypes();
+      // Fetch doctor-specific letter types (includes enabled/disabled status)
+      const apiData = await ApiService.getDoctorLetterTypes();
       
-      // Map and filter active prompts
+      // Filter only enabled and active prompts
       const prompts: PromptConfig[] = apiData
-        .filter((item: any) => item.isActive)
+        .filter((item: any) => item.isActive && item.isEnabledForUser !== false)
         .map((item: any) => ({
           id: item.id,
           name: item.name,
@@ -175,7 +176,7 @@ class PromptLoader {
         this.promptsCache.set(prompt.id, prompt);
       });
       
-      console.log(`✅ Loaded ${prompts.length} active prompts from database`);
+      console.log(`✅ Loaded ${prompts.length} enabled prompts from database`);
       return prompts;
     } catch (error) {
       console.error('❌ Failed to load all prompts from database:', error);

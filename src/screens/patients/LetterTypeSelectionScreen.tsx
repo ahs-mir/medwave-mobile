@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,53 +8,32 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import LetterService from '../../services/LetterService';
+import { useLetterTypes } from '../../hooks/useLetterTypes';
 
 export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
   const { patient, transcription } = route.params;
-  const [selectedType, setSelectedType] = useState<string>('consultation-paragraph');
+  const { letterTypes: apiLetterTypes, loading } = useLetterTypes();
+  const [selectedType, setSelectedType] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const letterTypes = [
-    // {
-    //   id: 'clinical',
-    //   title: 'Clinical Letter',
-    //   description: 'Generate a comprehensive clinical letter',
-    //   icon: 'medical-outline',
-    // },
-    {
-      id: 'consultation',
-      title: 'Consultation Letter (With Headings)',
-      description: 'Letter with section headings',
-      icon: 'document-text-outline',
-    },
-    {
-      id: 'consultation-paragraph',
-      title: 'Consultation (Paragraphs Only)',
-      description: 'Letter without section headings',
-      icon: 'document-outline',
-    },
-    // {
-    //   id: 'referral',
-    //   title: 'Referral Letter',
-    //   description: 'Generate a referral letter to another specialist',
-    //   icon: 'clipboard-outline',
-    // },
-    {
-      id: 'discharge',
-      title: 'Discharge Summary',
-      description: 'Create a comprehensive discharge summary',
-      icon: 'medical-outline',
-    },
-    {
-      id: 'custom',
-      title: 'Custom Letter',
-      description: 'Follow your instructions',
-      icon: 'create-outline',
-    },
-  ];
+  // Map API letter types to UI format
+  const letterTypes = apiLetterTypes.map((type) => ({
+    id: type.id,
+    title: type.name,
+    description: type.description,
+    icon: type.icon || 'document-text-outline',
+  }));
+
+  // Set default selection when letter types load
+  useEffect(() => {
+    if (letterTypes.length > 0 && !selectedType) {
+      setSelectedType(letterTypes[0].id);
+    }
+  }, [letterTypes]);
 
   const handleGenerateLetter = async () => {
     if (!selectedType) {
@@ -134,8 +113,18 @@ export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
 
         <Text style={styles.sectionTitle}>Select Letter Type</Text>
         
-        <View style={styles.letterTypesContainer}>
-          {letterTypes.map((type) => (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#003087" />
+            <Text style={styles.loadingText}>Loading letter types...</Text>
+          </View>
+        ) : letterTypes.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No letter types available. Please enable letter types in the web app.</Text>
+          </View>
+        ) : (
+          <View style={styles.letterTypesContainer}>
+            {letterTypes.map((type) => (
             <TouchableOpacity
               key={type.id}
               testID={selectedType === type.id ? `${type.id}-letter-selected` : `${type.id}-letter`}
@@ -165,8 +154,9 @@ export const LetterTypeSelectionScreen = ({ navigation, route }: any) => {
                 )}
               </View>
             </TouchableOpacity>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
 
         <TouchableOpacity
           style={[
@@ -337,5 +327,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#D1D5DB',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  emptyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 }); 

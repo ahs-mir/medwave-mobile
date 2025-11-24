@@ -38,24 +38,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const initializeAuth = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Initializing auth...');
+      
       const token = await ApiService.getToken();
+      console.log('🔑 Token check:', token ? 'Found' : 'Not found');
       
       if (token) {
-        // Try to restore user session by fetching user profile
+        // Try to restore user session by fetching user profile with timeout
         try {
-          const user = await ApiService.getCurrentUser();
+          console.log('👤 Attempting to restore user session...');
+          
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('User profile request timed out')), 10000)
+          );
+          
+          const userPromise = ApiService.getCurrentUser();
+          const user = await Promise.race([userPromise, timeoutPromise]) as any;
+          
           if (user) {
+            console.log('✅ User session restored:', user.email);
             setUser(user);
           } else {
+            console.log('⚠️ No user data returned, clearing token');
             await ApiService.setToken(null);
           }
         } catch (error) {
+          console.error('❌ Failed to restore user session:', error);
+          console.log('🧹 Clearing invalid token');
           await ApiService.setToken(null);
         }
+      } else {
+        console.log('ℹ️ No token found, user not authenticated');
       }
     } catch (error) {
+      console.error('❌ Auth initialization error:', error);
     } finally {
       setLoading(false);
+      console.log('🏁 Auth initialization complete');
     }
   };
 
@@ -75,25 +95,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Initialize auth when component mounts
   useEffect(() => {
-    initializeAuth();
+    // Add a safety timeout to ensure loading never hangs indefinitely
+    const safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ Auth initialization taking too long, forcing completion');
+      setLoading(false);
+    }, 15000); // 15 second max
+    
+    initializeAuth().finally(() => {
+      clearTimeout(safetyTimeout);
+    });
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const response = await ApiService.login(email, password);
+      console.log('🔐 Starting login for:', email);
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login request timed out. Please check your connection.')), 15000)
+      );
+      
+      const loginPromise = ApiService.login(email, password);
+      const response = await Promise.race([loginPromise, timeoutPromise]) as any;
+      
+      console.log('📥 Login response received:', { 
+        hasUser: !!response.user, 
+        hasToken: !!response.token,
+        success: response.success 
+      });
       
       if (response.user && response.token) {
         // Set the token in ApiService for future API calls
         await ApiService.setToken(response.token);
         setUser(response.user);
+        console.log('✅ Login successful, user set');
         return { success: true };
       }
-      return { success: false, error: 'Invalid response from server' };
+      
+      console.warn('⚠️ Invalid response structure:', response);
+      return { success: false, error: response.error || 'Invalid response from server' };
     } catch (err) {
+      console.error('❌ Login error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Login failed' };
     } finally {
       setLoading(false);
+      console.log('🏁 Login process finished, loading set to false');
     }
   };
 

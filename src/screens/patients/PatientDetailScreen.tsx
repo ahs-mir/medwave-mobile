@@ -30,6 +30,7 @@ import { loadPrompt, replacePromptPlaceholders } from '../../config/aiPrompts';
 import PatientStateService from '../../services/PatientStateService';
 import ClinicalLetterModal from '../../components/ClinicalLetterModal';
 import SimpleLetterDictation from '../../components/SimpleLetterDictation';
+import { useLetterTypes } from '../../hooks/useLetterTypes';
 import RenderHtml from 'react-native-render-html';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Speech from 'expo-speech';
@@ -82,10 +83,10 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [patientLetters, setPatientLetters] = useState<any[]>([]);
   const [loadingLetters, setLoadingLetters] = useState(false);
+  const [letterCount, setLetterCount] = useState<number>(0);
   const [showGeneratedLetter, setShowGeneratedLetter] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedLetterType, setSelectedLetterType] = useState<string>('consultation');
-  const [consultationFormat, setConsultationFormat] = useState<'headings' | 'paragraphs'>('paragraphs');
+  const [selectedLetterType, setSelectedLetterType] = useState<string>('');
   const [showValidationMessage, setShowValidationMessage] = useState(false);
   const [recordingPulse, setRecordingPulse] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -108,30 +109,25 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
   const [showSimpleLetterDictation, setShowSimpleLetterDictation] = useState(false);
   const [preGeneratedLetter, setPreGeneratedLetter] = useState<string>('');
 
-  // Letter types configuration
-  const letterTypes = [
-    {
-      id: 'consultation',
-      title: 'Consultation',
-      shortTitle: 'Consultation',
-      description: 'Standard consultation letter',
-      icon: 'document-text-outline',
-    },
-    {
-      id: 'discharge',
-      title: 'Discharge Summary',
-      shortTitle: 'Discharge',
-      description: 'Discharge summary letter',
-      icon: 'exit-outline',
-    },
-    {
-      id: 'custom',
-      title: 'Custom Letter',
-      shortTitle: 'Custom',
-      description: 'Follow your instructions',
-      icon: 'create-outline',
-    },
-  ];
+  // Fetch enabled letter types from API
+  const { letterTypes: apiLetterTypes } = useLetterTypes();
+  
+  // Map API letter types to UI format
+  const letterTypes = useMemo(() => {
+    return apiLetterTypes.map((type) => ({
+      id: type.id,
+      title: type.name,
+      description: type.description,
+      icon: type.icon || 'document-text-outline',
+    }));
+  }, [apiLetterTypes]);
+
+  // Set default selection when letter types load
+  useEffect(() => {
+    if (letterTypes.length > 0 && !selectedLetterType) {
+      setSelectedLetterType(letterTypes[0].id);
+    }
+  }, [letterTypes]);
 
   // Refs
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -177,6 +173,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
   }, [chatMessages.length]);
 
   // Load existing letters as chat history when component mounts
+  // Also set patientLetters for count display
   useEffect(() => {
     const loadExistingLetters = async () => {
       if (!patient?.id || !isAuthenticated) {
@@ -186,12 +183,18 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
       try {
         const existingLetters = await ApiService.getPatientLetters(patient.id);
 
-        if (existingLetters.length > 0) {
-          // Sort letters by creation date (newest first)
-          const sortedLetters = existingLetters.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
+        // Set patientLetters for count display (even if empty)
+        const sortedLetters = existingLetters.sort((a, b) => {
+          const dateA = new Date(a.createdAt || (a as any).created_at).getTime();
+          const dateB = new Date(b.createdAt || (b as any).created_at).getTime();
+          return dateB - dateA;
+        });
+        const processedLetters = processLetterData(sortedLetters);
+        setPatientLetters(processedLetters);
+        // Update count when letters are loaded
+        setLetterCount(processedLetters.length);
 
+        if (existingLetters.length > 0) {
           // Convert letters to chat messages format
           const chatHistory: Array<{
             id: string;
@@ -252,10 +255,28 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
         }
       } catch (error) {
         // Silent error handling
+        console.error('Error loading existing letters:', error);
       }
     };
 
     loadExistingLetters();
+  }, [patient?.id, isAuthenticated, processLetterData]);
+
+  // Load letter count on mount (for tab display)
+  useEffect(() => {
+    const loadLetterCount = async () => {
+      if (!patient?.id || !isAuthenticated) {
+        return;
+      }
+      try {
+        const count = await ApiService.getPatientLettersCount(patient.id);
+        setLetterCount(count);
+      } catch (error) {
+        console.error('Error loading letter count:', error);
+        // Keep count at 0 on error
+      }
+    };
+    loadLetterCount();
   }, [patient?.id, isAuthenticated]);
 
   // Check if patient data exists and is valid
@@ -352,6 +373,13 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
         
         if (savedLetter) {
           setCurrentLetterId(savedLetter.id);
+          // Refresh letter count after creating new letter
+          try {
+            const count = await ApiService.getPatientLettersCount(patient.id);
+            setLetterCount(count);
+          } catch (error) {
+            console.error('Error refreshing letter count:', error);
+          }
         }
       }
       
@@ -363,12 +391,27 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
       // Show success feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
+      console.error('❌ Error saving letter:', error);
       
       // Show error feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
-      // Optional: Show error message to user
-      // You could add an error toast here
+      // Extract error message
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to save letter. Please try again.';
+      
+      // Show error to user
+      setNetworkError(`Error saving letter: ${errorMessage}`);
+      
+      // Also show alert for immediate feedback
+      Alert.alert(
+        'Save Failed',
+        errorMessage.length > 100 
+          ? 'Failed to save letter. Please try again.' 
+          : errorMessage,
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsSavingLetter(false);
     }
@@ -967,6 +1010,8 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
       // Pre-process data once (strip HTML, format dates)
       const processedLetters = processLetterData(sortedLetters);
       setPatientLetters(processedLetters);
+      // Update count when letters are loaded
+      setLetterCount(processedLetters.length);
     } catch (error) {
       console.error('❌ Error fetching patient letters:', error);
       setNetworkError('Failed to load letter history');
@@ -975,9 +1020,16 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
     }
   };
 
-  // Load patient letters when history tab is activated
+  // Load patient letters count on mount (for tab count display)
   useEffect(() => {
-    if (activeTab === 'history') {
+    if (patient?.id) {
+      fetchPatientLetters();
+    }
+  }, [patient?.id, processLetterData]);
+
+  // Refresh patient letters when history tab is activated (in case new letters were created)
+  useEffect(() => {
+    if (activeTab === 'history' && patient?.id) {
       fetchPatientLetters();
     }
   }, [activeTab, patient?.id, processLetterData]);
@@ -1105,7 +1157,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                 styles.tabText,
                 activeTab === 'history' && styles.tabTextActive
               ]}>
-                History ({patientLetters.length})
+                History ({letterCount})
               </Text>
             </TouchableOpacity>
           </View>
@@ -1121,7 +1173,9 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
             <View style={styles.errorBanner}>
               <View style={styles.errorContent}>
                 <Ionicons name="warning" size={16} color="#FFFFFF" />
-                <Text style={styles.errorText}>{networkError}</Text>
+                <Text style={styles.errorText} numberOfLines={3} ellipsizeMode="tail">
+                  {networkError}
+                </Text>
                 <TouchableOpacity
                   onPress={() => setNetworkError(null)}
                   style={styles.errorCloseButton}
@@ -1153,23 +1207,19 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                     onChangeText={setCurrentInput}
                     multiline
                     textAlignVertical="top"
-                    maxLength={10000}
                   />
-                  <View style={styles.characterCounter}>
-                    <Text style={styles.characterCounterText}>
-                      {currentInput.length}/10000
-                    </Text>
-                  </View>
+                </View>
+                {/* Word/Character Counter - Outside textarea */}
+                <View style={styles.counterContainer}>
+                  <Text style={styles.counterText}>
+                    {currentInput.trim().split(/\s+/).filter(word => word.length > 0).length} words • {currentInput.length} characters
+                  </Text>
                 </View>
 
                 {/* Letter Type */}
                 <View style={styles.optionGroup}>
                   <Text style={styles.optionLabel}>Letter Type:</Text>
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.chipsRow}
-                  >
+                  <View style={styles.chipsRow}>
                     {letterTypes.map((type) => (
                       <TouchableOpacity
                         key={type.id}
@@ -1184,53 +1234,12 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                           styles.chipText,
                           selectedLetterType === type.id && styles.chipTextSelected
                         ]}>
-                          {type.shortTitle}
+                          {type.title}
                         </Text>
                       </TouchableOpacity>
                     ))}
-                  </ScrollView>
-                </View>
-
-                {/* Format - Only show when Consultation is selected */}
-                {selectedLetterType === 'consultation' && (
-                  <View style={styles.optionGroup}>
-                    <Text style={styles.optionLabel}>Format:</Text>
-                    <View style={styles.segmentedControl}>
-                      <TouchableOpacity
-                        style={[
-                          styles.segment,
-                          styles.segmentLeft,
-                          consultationFormat === 'paragraphs' && styles.segmentSelected
-                        ]}
-                        onPress={() => setConsultationFormat('paragraphs')}
-                        disabled={isGenerating}
-                      >
-                        <Text style={[
-                          styles.segmentText,
-                          consultationFormat === 'paragraphs' && styles.segmentTextSelected
-                        ]}>
-                          Paragraphs
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.segment,
-                          styles.segmentRight,
-                          consultationFormat === 'headings' && styles.segmentSelected
-                        ]}
-                        onPress={() => setConsultationFormat('headings')}
-                        disabled={isGenerating}
-                      >
-                        <Text style={[
-                          styles.segmentText,
-                          consultationFormat === 'headings' && styles.segmentTextSelected
-                        ]}>
-                          Headings
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
-                )}
+                </View>
               </ScrollView>
             ) : (
               /* History Tab Content - Optimized with FlatList */
@@ -1286,12 +1295,7 @@ export const PatientDetailScreen = ({ navigation, route }: any) => {
                   ]}
                   onPress={() => {
                     if (selectedLetterType) {
-                      // Determine the actual letter type to generate
-                      let actualLetterType = selectedLetterType;
-                      if (selectedLetterType === 'consultation') {
-                        actualLetterType = consultationFormat === 'headings' ? 'consultation' : 'consultation-paragraph';
-                      }
-                      generateLetterForPopup(actualLetterType);
+                      generateLetterForPopup(selectedLetterType);
                     }
                   }}
                   disabled={!currentInput.trim() || !selectedLetterType || isGenerating}
@@ -2520,9 +2524,10 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     marginLeft: 8,
     marginRight: 8,
+    flexWrap: 'wrap',
   },
   errorCloseButton: {
     padding: 4,
@@ -2663,9 +2668,9 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   
-  // Option Group - BASE (Clean, No Headers)
+  // Option Group - BASE (Clean, No Headers) - Zander Whitehurst Style
   optionGroup: {
-    marginTop: 32,
+    marginTop: 20,
   },
   optionLabel: {
     fontSize: 15,
@@ -2704,14 +2709,14 @@ const styles = StyleSheet.create({
   // Input Wrapper with Character Counter - Zander Whitehurst Style
   inputWrapper: {
     position: 'relative',
-    marginBottom: 32,
+    marginBottom: 4,
   },
   textInput: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 44,
+    paddingBottom: 20,
     fontSize: 16,
     color: '#000000',
     minHeight: 180,
@@ -2720,6 +2725,19 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     lineHeight: 24,
     letterSpacing: -0.2,
+  },
+  counterContainer: {
+    marginTop: 2,
+    marginBottom: 16,
+    alignItems: 'flex-end',
+    paddingHorizontal: 4,
+  },
+  counterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    fontFamily: 'System',
+    letterSpacing: -0.1,
   },
   characterCounter: {
     position: 'absolute',
@@ -2870,22 +2888,27 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   
-  // Letter Type Chips - Zander Whitehurst Style (Single Line, Horizontal Scroll)
+  // Letter Type Chips - Horizontal Row with Wrapping (Zander Whitehurst Style)
   chipsRow: {
     flexDirection: 'row',
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingRight: 24, // Extra padding for scroll edge
   },
   chip: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: '#F3F4F6',
     borderWidth: 0,
+    minHeight: 44, // Ensure proper touch target
   },
   chipSelected: {
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1, // For Android
   },
   chipText: {
     fontSize: 15,

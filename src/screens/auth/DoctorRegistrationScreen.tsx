@@ -18,6 +18,8 @@ import { useAuth } from '../../context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import OAuthService from '../../services/OAuthService';
 
+const OAUTH_ENABLED = false;
+
 const DoctorRegistrationScreen = ({ navigation }: any) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -196,9 +198,13 @@ const DoctorRegistrationScreen = ({ navigation }: any) => {
             <View style={styles.oauthSection}>
               {/* Google Register - Always show for now (can be configured later) */}
               <TouchableOpacity 
-                style={[styles.oauthButton, styles.googleButton, isLoading && styles.oauthButtonDisabled]}
-                onPress={handleGoogleRegister}
-                disabled={isLoading}
+                style={[
+                  styles.oauthButton,
+                  styles.googleButton,
+                  (isLoading || !OAUTH_ENABLED) && styles.oauthButtonDisabled,
+                ]}
+                onPress={OAUTH_ENABLED ? handleGoogleRegister : undefined}
+                disabled={isLoading || !OAUTH_ENABLED}
                 activeOpacity={0.8}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" style={{ marginRight: 12 }} />
@@ -207,9 +213,13 @@ const DoctorRegistrationScreen = ({ navigation }: any) => {
 
               {isAppleAvailable && (
                 <TouchableOpacity 
-                  style={[styles.oauthButton, styles.appleButton, isLoading && styles.oauthButtonDisabled]}
-                  onPress={handleAppleRegister}
-                  disabled={isLoading}
+                  style={[
+                    styles.oauthButton,
+                    styles.appleButton,
+                    (isLoading || !OAUTH_ENABLED) && styles.oauthButtonDisabled,
+                  ]}
+                  onPress={OAUTH_ENABLED ? handleAppleRegister : undefined}
+                  disabled={isLoading || !OAUTH_ENABLED}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="logo-apple" size={20} color="#FFFFFF" style={{ marginRight: 12 }} />

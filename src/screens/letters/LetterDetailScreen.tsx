@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,21 +25,56 @@ interface LetterDetailScreenProps {
   route: {
     params: {
       letter: LetterFrontend;
-      patientName: string;
+      patientName?: string;
+      patient?: any;
+      letterId?: number;
     };
   };
 }
 
 export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigation, route }) => {
-  const { letter, patientName } = route.params;
+  const { letter: initialLetter, patientName: routePatientName, patient } = route.params;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const [letter, setLetter] = useState<LetterFrontend>(initialLetter);
+  
+  // Extract patient name from various sources
+  const patientName = routePatientName || 
+                      patient?.name || 
+                      letter.patientName || 
+                      letter.patient_name ||
+                      'Unknown Patient';
   const [isDeleting, setIsDeleting] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [patientDetails, setPatientDetails] = useState<PatientFrontend | null>(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
+  const [loadingLetter, setLoadingLetter] = useState(false);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const hasFetchedContent = useRef(false);
+
+  // Fetch full letter content if it's missing
+  useEffect(() => {
+    const fetchLetterContent = async () => {
+      // Only fetch once, and only if content is missing
+      if (hasFetchedContent.current || letter.content || !letter.id) {
+        return;
+      }
+      
+      hasFetchedContent.current = true;
+      setLoadingLetter(true);
+      try {
+        const fullLetter = await ApiService.getLetter(letter.id);
+        setLetter(fullLetter);
+      } catch (error) {
+        console.error('Failed to fetch letter content:', error);
+      } finally {
+        setLoadingLetter(false);
+      }
+    };
+
+    fetchLetterContent();
+  }, [letter.id, letter.content]);
 
   // Fetch patient details on component mount
   useEffect(() => {
@@ -199,7 +234,7 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
               if (success) {
                 Alert.alert('Success', 'Letter approved successfully');
                 // Update the letter status locally
-                letter.status = 'approved';
+                setLetter({ ...letter, status: 'approved' });
                 // Navigate back to refresh the letters list
                 navigation.goBack();
               } else {
@@ -233,7 +268,7 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
               if (success) {
                 Alert.alert('Success', 'Letter posted successfully');
                 // Update the letter status locally
-                letter.status = 'posted';
+                setLetter({ ...letter, status: 'posted' });
                 // Navigate back to refresh the letters list
                 navigation.goBack();
               } else {
@@ -261,14 +296,14 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
           onPress={() => navigation.goBack()} 
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color="#2D3748" />
+          <Ionicons name="chevron-back" size={22} color="#111827" />
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {patientName}
           </Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
             {formatLetterType(letter.type)}
           </Text>
         </View>
@@ -283,16 +318,9 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
 
       {/* Status Section */}
       <View style={styles.statusSection}>
-        <View style={styles.statusMetadataContainer}>
-          <Text style={styles.statusMetadata}>
-            Created {formatDate(letter.createdAt)}
-          </Text>
-          {letter.updatedAt !== letter.createdAt && (
-            <Text style={styles.statusMetadata}>
-              Updated {formatDate(letter.updatedAt)}
-            </Text>
-          )}
-        </View>
+        <Text style={styles.statusMetadata}>
+          Created {formatDate(letter.createdAt)}
+        </Text>
         <View style={[
           styles.statusBadge,
           { 
@@ -300,12 +328,6 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
             borderColor: getStatusBorderColor(letter.status)
           }
         ]}>
-          <Ionicons 
-            name={getStatusIcon(letter.status)} 
-            size={16} 
-            color={getStatusColor(letter.status)} 
-            style={styles.statusIcon}
-          />
           <Text style={[styles.statusText, { color: getStatusColor(letter.status) }]}>
             {getStatusText(letter.status)}
           </Text>
@@ -348,54 +370,54 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
 
         {/* Letter Content */}
         <View style={styles.contentArea}>
-            {letter.content ? (
+            {loadingLetter ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#6B7280" />
+                <Text style={styles.loadingText}>Loading content...</Text>
+              </View>
+            ) : letter.content ? (
               <RenderHtml
                 contentWidth={width - 64} // Account for px-4 safe padding
                 source={{ html: letter.content }}
                 baseStyle={styles.htmlContent}
                 tagsStyles={{
                   p: { 
-                    fontSize: 14, // text-sm
-                    color: '#374151', // text-gray-700
-                    lineHeight: 22, // leading-relaxed
-                    marginBottom: 12,
+                    fontSize: 16,
+                    color: '#374151',
+                    lineHeight: 26,
+                    marginBottom: 16,
+                    letterSpacing: -0.1,
                   },
                   h1: { 
-                    fontSize: 16, // text-base
-                    fontWeight: '600', // font-semibold
-                    marginBottom: 4, // mb-1
+                    fontSize: 18,
+                    fontWeight: '600',
+                    marginBottom: 8,
                     color: '#111827',
-                    borderBottomWidth: 1,
-                    borderBottomColor: '#E5E7EB',
-                    paddingBottom: 8,
-                    marginTop: 16,
+                    marginTop: 24,
+                    letterSpacing: -0.3,
                   },
                   h2: { 
-                    fontSize: 16, // text-base
-                    fontWeight: '600', // font-semibold
-                    marginBottom: 4, // mb-1
+                    fontSize: 17,
+                    fontWeight: '600',
+                    marginBottom: 8,
                     color: '#111827',
-                    borderBottomWidth: 1,
-                    borderBottomColor: '#E5E7EB',
-                    paddingBottom: 8,
-                    marginTop: 16,
+                    marginTop: 24,
+                    letterSpacing: -0.3,
                   },
                   h3: { 
-                    fontSize: 16, // text-base
-                    fontWeight: '600', // font-semibold
-                    marginBottom: 4, // mb-1
+                    fontSize: 16,
+                    fontWeight: '600',
+                    marginBottom: 8,
                     color: '#111827',
-                    borderBottomWidth: 1,
-                    borderBottomColor: '#E5E7EB',
-                    paddingBottom: 8,
-                    marginTop: 16,
+                    marginTop: 20,
+                    letterSpacing: -0.2,
                   },
                   strong: {
-                    fontWeight: 'bold',
+                    fontWeight: '600',
                     color: '#111827',
                   },
                   b: {
-                    fontWeight: 'bold',
+                    fontWeight: '600',
                     color: '#111827',
                   },
                   em: {
@@ -406,24 +428,26 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
                     fontStyle: 'italic',
                     color: '#374151',
                   },
-                  ul: { marginBottom: 12, paddingLeft: 16 },
-                  ol: { marginBottom: 12, paddingLeft: 16 },
+                  ul: { marginBottom: 16, paddingLeft: 20 },
+                  ol: { marginBottom: 16, paddingLeft: 20 },
                   li: { 
-                    marginBottom: 4,
-                    fontSize: 14, // text-sm
-                    color: '#374151', // text-gray-700
-                    lineHeight: 22, // leading-relaxed
+                    marginBottom: 6,
+                    fontSize: 16,
+                    color: '#374151',
+                    lineHeight: 26,
+                    letterSpacing: -0.1,
                   },
                   br: {
-                    marginBottom: 8,
+                    marginBottom: 12,
                   },
                 }}
                 enableExperimentalMarginCollapsing={true}
                 defaultTextProps={{
                   style: {
                     fontSize: 16,
-                    lineHeight: 24,
+                    lineHeight: 26,
                     color: '#374151',
+                    letterSpacing: -0.1,
                   }
                 }}
               />
@@ -480,87 +504,72 @@ export const LetterDetailScreen: React.FC<LetterDetailScreenProps> = ({ navigati
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    minHeight: 72,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingTop: 12,
+    paddingBottom: 16,
+    minHeight: 64,
   },
   backButton: {
-    padding: 8,
-    marginRight: 12,
+    padding: 4,
+    marginRight: 8,
   },
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginLeft: 8,
+    minWidth: 0, // Allow text to shrink
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#2D3748',
-    textAlign: 'center',
-    marginBottom: 6,
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#111827',
+    letterSpacing: -0.4,
+    marginBottom: 2,
+    flexShrink: 1, // Allow text to shrink if needed
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
-    fontWeight: '500',
-    textAlign: 'center',
+    fontWeight: '400',
+    letterSpacing: -0.2,
   },
   menuButton: {
-    padding: 8,
-    marginLeft: 12,
+    padding: 4,
+    marginLeft: 8,
   },
   statusSection: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
-  },
-  statusIcon: {
-    marginRight: 6,
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statusMetadataContainer: {
-    flex: 1,
-    marginRight: 16,
-    alignItems: 'flex-start',
+    letterSpacing: 0.3,
   },
   statusMetadata: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
-    textAlign: 'left',
-    lineHeight: 18,
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '400',
+    letterSpacing: -0.1,
   },
   menuBackdrop: {
     position: 'absolute',
@@ -603,8 +612,8 @@ const styles = StyleSheet.create({
     marginBottom: 80, // Space for fixed bottom bar
   },
   scrollContent: {
-    paddingHorizontal: 20, // More generous padding
-    paddingVertical: 20,
+    paddingHorizontal: 20,
+    paddingTop: 24,
     paddingBottom: 24,
     flexGrow: 1,
   },
@@ -624,10 +633,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 32,
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
   htmlContent: {
-    fontSize: 16, // text-base
-    lineHeight: 24, // leading-relaxed
-    color: '#2D3748', // text-gray-800
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#374151',
+    letterSpacing: -0.1,
   },
   // Bottom Action Bar Styles
   bottomActionBar: {
@@ -637,43 +658,37 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
+    borderTopColor: '#F3F4F6',
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   actionButtonContainer: {
     flexDirection: 'row',
-    gap: 12,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16, // Taller buttons
-    paddingHorizontal: 20,
-    borderRadius: 12, // More rounded corners
-    borderWidth: 1,
-    minHeight: 52, // Consistent height
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    minHeight: 50,
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 6,
+    marginLeft: 8,
+    letterSpacing: -0.2,
   },
   // Primary buttons (filled)
   approveButton: {
-    backgroundColor: '#2C3E50', // Dark blue-grey primary
-    borderColor: '#2C3E50',
+    backgroundColor: '#111827',
+    borderWidth: 0,
   },
   postButton: {
-    backgroundColor: '#2C3E50', // Dark blue-grey primary
-    borderColor: '#2C3E50',
+    backgroundColor: '#111827',
+    borderWidth: 0,
   },
   primaryButtonText: {
     color: '#FFFFFF',

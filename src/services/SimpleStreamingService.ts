@@ -124,9 +124,16 @@ class SimpleStreamingService {
    */
   private async saveLetterToBackend(content: string, patientInfo: any, letterType: string, rawTranscription?: string): Promise<void> {
     try {
+      console.log('💾 Saving letter to backend:', {
+        contentLength: content.length,
+        contentPreview: content.substring(0, 200) + '...',
+        patientId: patientInfo.id,
+        letterType: letterType
+      });
+      
       const letterData = {
         patientId: typeof patientInfo.id === 'string' ? parseInt(patientInfo.id, 10) : patientInfo.id,
-        content: content, // AI-generated content
+        content: content, // AI-generated content - save full content without stripping
         rawTranscription: rawTranscription || '', // Original transcription
         type: letterType,
         priority: 'medium' as const,
@@ -135,7 +142,11 @@ class SimpleStreamingService {
       };
 
       const savedLetter = await ApiService.createLetter(letterData);
-      console.log('✅ Letter saved successfully:', savedLetter);
+      console.log('✅ Letter saved successfully:', {
+        id: savedLetter.id,
+        savedContentLength: savedLetter.content?.length || 0,
+        savedContentPreview: savedLetter.content?.substring(0, 200) + '...'
+      });
     } catch (error) {
       console.error('❌ Failed to save letter:', error);
     }

@@ -20,6 +20,8 @@ import * as Haptics from 'expo-haptics';
 import OAuthService from '../../services/OAuthService';
 import { DEV_USER_EMAIL, DEV_USER_PASSWORD, DEV_QUICK_LOGIN_ENABLED } from '@env';
 
+const OAUTH_ENABLED = false;
+
 export const LoginScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -284,9 +286,13 @@ export const LoginScreen = ({ navigation }: any) => {
 
               {/* Google Sign-In */}
               <TouchableOpacity 
-                style={[styles.oauthButton, styles.googleButton, isLoading && styles.oauthButtonDisabled]}
-                onPress={handleGoogleLogin}
-                disabled={isLoading}
+                style={[
+                  styles.oauthButton,
+                  styles.googleButton,
+                  (isLoading || !OAUTH_ENABLED) && styles.oauthButtonDisabled,
+                ]}
+                onPress={OAUTH_ENABLED ? handleGoogleLogin : undefined}
+                disabled={isLoading || !OAUTH_ENABLED}
                 activeOpacity={0.8}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" style={{ marginRight: 12 }} />
@@ -295,9 +301,13 @@ export const LoginScreen = ({ navigation }: any) => {
 
               {isAppleAvailable && (
                 <TouchableOpacity 
-                  style={[styles.oauthButton, styles.appleButton, isLoading && styles.oauthButtonDisabled]}
-                  onPress={handleAppleLogin}
-                  disabled={isLoading}
+                  style={[
+                    styles.oauthButton,
+                    styles.appleButton,
+                    (isLoading || !OAUTH_ENABLED) && styles.oauthButtonDisabled,
+                  ]}
+                  onPress={OAUTH_ENABLED ? handleAppleLogin : undefined}
+                  disabled={isLoading || !OAUTH_ENABLED}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="logo-apple" size={20} color="#FFFFFF" style={{ marginRight: 12 }} />

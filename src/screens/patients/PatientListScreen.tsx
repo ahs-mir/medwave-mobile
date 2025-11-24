@@ -13,7 +13,6 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/ApiService';
 import { PatientFrontend } from '../../types';
@@ -258,11 +257,8 @@ export const PatientListScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Hero Header */}
-      <LinearGradient
-        colors={['#FAFAFA', '#F5F5F5']}
-        style={styles.heroHeader}
-      >
+      {/* Header */}
+      <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Welcome</Text>
@@ -270,34 +266,18 @@ export const PatientListScreen = () => {
               {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'User'}
             </Text>
           </View>
-          <View style={styles.headerControls}>
-            {/* Refresh Button */}
-            <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={() => {
-                if (isAuthenticated) {
-                  fetchPatients();
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="refresh" size={20} color="#000000" />
-            </TouchableOpacity>
-            
-            {/* Add Patient Button */}
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => (navigation as any).navigate('AddPatient')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => (navigation as any).navigate('AddPatient')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search patients..."
@@ -307,7 +287,7 @@ export const PatientListScreen = () => {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
@@ -322,11 +302,9 @@ export const PatientListScreen = () => {
             <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
               Pending
             </Text>
-            <View style={[styles.tabBadge, activeTab === 'pending' && styles.activeTabBadge]}>
-              <Text style={[styles.tabBadgeText, activeTab === 'pending' && styles.activeTabBadgeText]}>
-                {patients.filter(patient => (patient.letterCount || 0) === 0).length}
-              </Text>
-            </View>
+            <Text style={[styles.tabCount, activeTab === 'pending' && styles.activeTabCount]}>
+              {patients.filter(patient => (patient.letterCount || 0) === 0).length}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
@@ -336,14 +314,12 @@ export const PatientListScreen = () => {
             <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
               Completed
             </Text>
-            <View style={[styles.tabBadge, activeTab === 'completed' && styles.activeTabBadge]}>
-              <Text style={[styles.tabBadgeText, activeTab === 'completed' && styles.activeTabBadgeText]}>
-                {patients.filter(patient => (patient.letterCount || 0) > 0).length}
-              </Text>
-            </View>
+            <Text style={[styles.tabCount, activeTab === 'completed' && styles.activeTabCount]}>
+              {patients.filter(patient => (patient.letterCount || 0) > 0).length}
+            </Text>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
 
 
@@ -429,77 +405,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   
-  // Hero Header
-  heroHeader: {
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 0 : 20,
-    paddingBottom: 24,
+  // Header
+  header: {
+    backgroundColor: '#FAFAFA',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 8 : 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 20,
   },
   headerLeft: {
     flex: 1,
   },
   greeting: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     color: '#6B7280',
     marginBottom: 4,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   doctorName: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 26,
+    fontWeight: '700',
     color: '#000000',
-    letterSpacing: -0.8,
-    lineHeight: 34,
-  },
-  headerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    letterSpacing: -0.5,
+    lineHeight: 30,
   },
   addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
   },
   
   // Search Bar
@@ -507,94 +451,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    marginBottom: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 16,
-    fontSize: 16,
+    fontSize: 15,
     color: '#000000',
     fontWeight: '400',
+    padding: 0,
   },
   clearButton: {
     padding: 4,
+    marginLeft: 8,
   },
 
   // Tabs
   tabsContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   tab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    gap: 8,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
   },
   activeTab: {
-    backgroundColor: '#FFFFFF',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    backgroundColor: '#000000',
   },
   tabText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#9CA3AF',
+    color: '#6B7280',
     letterSpacing: -0.2,
   },
   activeTabText: {
-    color: '#000000',
-    fontWeight: '700',
-  },
-  tabBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    minWidth: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeTabBadge: {
-    backgroundColor: '#000000',
-  },
-  tabBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  activeTabBadgeText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  tabCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  activeTabCount: {
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   emptyStateContainer: {
     flex: 1,

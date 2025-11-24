@@ -57,17 +57,13 @@ export const PatientListItem = React.memo<PatientListItemProps>(({
             <Text style={styles.listMRNumber}>MR #{patient.id}</Text>
           </View>
           
-          <View style={styles.listStatusSection}>
-            {hasLetters && (
-              <View testID="completed-patient-checkmark" style={styles.greenTick}>
-                <Ionicons name="checkmark" size={20} color="#10B981" />
-              </View>
-            )}
-          </View>
+          {hasLetters && (
+            <View testID="completed-patient-checkmark" style={styles.statusIcon}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+            </View>
+          )}
           
-          <View style={styles.listArrowSection}>
-            <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
-          </View>
+          <Ionicons name="chevron-forward" size={16} color="#9CA3AF" style={styles.chevron} />
         </View>
       </TouchableOpacity>
     </>
@@ -87,89 +83,62 @@ PatientListItem.displayName = 'PatientListItem';
 
 const styles = StyleSheet.create({
   sectionHeader: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FAFAFA',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   sectionHeaderText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   patientListItem: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 2,
-    marginHorizontal: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
-    borderTopWidth: 0,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   listItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
   },
   listAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#374151',
     alignItems: 'center',
     justifyContent: 'center',
   },
   listAvatarText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
   listInfoSection: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
     justifyContent: 'center',
   },
   listPatientName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 1,
+    color: '#000000',
+    marginBottom: 2,
+    letterSpacing: -0.2,
   },
   listMRNumber: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
-    fontWeight: '500',
+    fontWeight: '400',
   },
-  listStatusSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    minWidth: 20,
+  statusIcon: {
+    marginRight: 12,
   },
-  greenTick: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#ECFDF5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  listArrowSection: {
-    marginLeft: 6,
+  chevron: {
+    marginLeft: 4,
   },
 });

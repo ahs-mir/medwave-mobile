@@ -4,7 +4,7 @@ module.exports = ({ config }) => {
     expo: {
       name: "MedWave",
       slug: "medwave",
-      version: "1.0.0",
+      version: "1.0.1",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
@@ -39,9 +39,10 @@ module.exports = ({ config }) => {
           projectId: "dd546335-b1ca-41c4-b066-d4626f5013d1"
         },
         // API Configuration - accessible via Constants.expoConfig.extra
-        // For local testing: http://localhost:8080/api
+        // iOS Simulator can use localhost (runs on same machine)
+        // Physical devices need Mac's IP address
         // For production: https://slippery-glass-production.up.railway.app/api
-        apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8080/api' : 'https://slippery-glass-production.up.railway.app/api'),
+        apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8080/api',
         devQuickLoginEnabled: process.env.DEV_QUICK_LOGIN_ENABLED || 'false'
       },
       runtimeVersion: "1.0.0",

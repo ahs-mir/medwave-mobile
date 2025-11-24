@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   SafeAreaView,
+  useWindowDimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
@@ -20,6 +21,7 @@ import LetterService from '../services/LetterService'
 import { streamOpenAI } from '../lib/openaiStream'
 import { loadPrompt, replacePromptPlaceholders } from '../config/aiPrompts'
 import RenderHtml from 'react-native-render-html'
+import { useLetterTypes } from '../hooks/useLetterTypes'
 
 interface SimpleLetterDictationProps {
   visible: boolean
@@ -47,18 +49,38 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
     hasPreGeneratedContent: !!preGeneratedContent,
     patientName: patient?.name 
   })
+  const { width: screenWidth } = useWindowDimensions()
   const [generatedLetter, setGeneratedLetter] = useState('')
   const [streamingText, setStreamingText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [letterType, setLetterType] = useState(propSelectedLetterType || 'consultation-paragraph')
+  const [letterType, setLetterType] = useState(propSelectedLetterType || '')
+  const { letterTypes: apiLetterTypes, loading: letterTypesLoading } = useLetterTypes()
+  
+  // Use refs to accumulate content (must be at component level)
+  const fullLetterTextRef = useRef('')
+  const tokenCountRef = useRef(0)
+  
+  // Calculate content width based on modal width (88% of screen, minus padding)
+  const modalWidth = screenWidth * 0.88
+  const contentWidth = modalWidth - 32 // Subtract horizontal padding (16px each side)
 
-  const letterTypes = [
-    { id: 'consultation', name: 'Consultation (Headings)', icon: '📋' },
-    { id: 'consultation-paragraph', name: 'Consultation (Paragraphs Only)', icon: '📋' },
-    { id: 'custom', name: 'Custom Letter', icon: '✏️' },
-    { id: 'referral', name: 'Referral', icon: '📤' },
-    { id: 'discharge', name: 'Discharge', icon: '🏥' },
-  ]
+  // Map API letter types to UI format
+  const letterTypes = useMemo(() => {
+    return apiLetterTypes.map((type) => ({
+      id: type.id,
+      name: type.name,
+      icon: '📋', // Default icon, can be enhanced later
+    }));
+  }, [apiLetterTypes]);
+
+  // Set default selection when letter types load
+  useEffect(() => {
+    if (letterTypes.length > 0 && !letterType && !propSelectedLetterType) {
+      setLetterType(letterTypes[0].id);
+    } else if (propSelectedLetterType) {
+      setLetterType(propSelectedLetterType);
+    }
+  }, [letterTypes, propSelectedLetterType]);
 
   const handleGenerate = useCallback(async () => {
     // Use prop input text if available
@@ -100,21 +122,68 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
       const prompt = replacePromptPlaceholders(promptConfig.userPrompt, replacements)
       const systemRole = promptConfig.systemRole
 
-      // Use a ref to accumulate the full letter text
-      let fullLetterText = ''
+      // Reset accumulators when starting new generation
+      fullLetterTextRef.current = ''
+      tokenCountRef.current = 0
+      
+      console.log('🚀 Starting letter generation:', {
+        promptLength: prompt.length,
+        letterType: letterType,
+        patientName: patient?.name,
+        systemRoleLength: systemRole?.length || 0
+      })
       
       // Start streaming
       const cancelStream = streamOpenAI({
         prompt,
         systemRole,
+        patientInfo: patient,
+        letterType: letterType,
         onToken: (token: string) => {
-          fullLetterText += token
-          setStreamingText(prev => prev + token)
+          if (!token || token.trim().length === 0) {
+            console.warn('⚠️ Received empty token, skipping')
+            return
+          }
+          
+          tokenCountRef.current++
+          fullLetterTextRef.current += token
+          
+          console.log(`📥 Token ${tokenCountRef.current}: "${token.substring(0, 30)}..." (${token.length} chars, total: ${fullLetterTextRef.current.length})`)
+          
+          // Update state for UI display
+          setStreamingText(prev => {
+            const updated = prev + token
+            setGeneratedLetter(updated)
+            return updated
+          })
         },
         onEnd: () => {
-          // Set the complete letter when streaming finishes
-          setGeneratedLetter(fullLetterText)
+          // Use ref value (most reliable source)
+          const finalContent = fullLetterTextRef.current
+          
+          console.log('🏁 Stream ended:', {
+            tokenCount: tokenCountRef.current,
+            finalContentLength: finalContent.length,
+            finalContentPreview: finalContent.substring(0, 200)
+          })
+          
+          // CRITICAL: Always set the content, even if short
+          if (finalContent && finalContent.trim().length > 0) {
+            console.log('✅ Setting final content to state')
+            setGeneratedLetter(finalContent)
+            setStreamingText(finalContent)
+          } else {
+            console.error('❌ ERROR: finalContent is empty!')
+            console.error('   fullLetterTextRef.current:', fullLetterTextRef.current)
+            console.error('   tokenCountRef.current:', tokenCountRef.current)
+          }
+          
           setIsStreaming(false)
+          
+          if (finalContent.length < 100) {
+            console.error('⚠️ WARNING: Generated content is very short!')
+          }
+          
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         },
         onError: (error: string) => {
@@ -133,44 +202,62 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
 
   // Auto-load pre-generated content or generate new content
   useEffect(() => {
-    console.log('useEffect triggered:', { 
-      visible, 
-      propSelectedLetterType, 
-      propInputText, 
-      hasPreGeneratedContent: !!preGeneratedContent,
-      preGeneratedContentLength: preGeneratedContent?.length 
-    })
+    if (!visible) return
     
-    if (visible && propSelectedLetterType) {
-      // Set the letter type
+    // Always set the letter type if provided
+    if (propSelectedLetterType) {
       setLetterType(propSelectedLetterType)
-      
-      if (preGeneratedContent) {
-        // Use pre-generated content
-        console.log('Using pre-generated content, length:', preGeneratedContent.length)
-        console.log('First 200 chars:', preGeneratedContent.substring(0, 200))
-        setGeneratedLetter(preGeneratedContent)
-        setStreamingText('')
-        setIsStreaming(false)
-        console.log('State updated with pre-generated content')
-      } else if (propInputText?.trim()) {
-        // Auto-start generation
-        console.log('Auto-starting generation...')
-        setGeneratedLetter('')
-        setStreamingText('')
-        setTimeout(() => {
-          handleGenerate()
-        }, 300) // Small delay to ensure state is set
-      }
+    } else if (letterTypes.length > 0 && !letterType) {
+      setLetterType(letterTypes[0].id)
     }
-  }, [visible, propSelectedLetterType, propInputText, preGeneratedContent, handleGenerate])
+    
+    if (preGeneratedContent) {
+      // Use pre-generated content
+      setGeneratedLetter(preGeneratedContent)
+      setStreamingText(preGeneratedContent)
+      setIsStreaming(false)
+      fullLetterTextRef.current = preGeneratedContent
+    } else if (propInputText?.trim() && !generatedLetter && !isStreaming) {
+      // Auto-start generation only if we don't already have content
+      handleGenerate()
+    }
+  }, [visible, propSelectedLetterType, propInputText, preGeneratedContent, letterTypes, letterType, generatedLetter, isStreaming])
 
   const handleAccept = async () => {
     try {
+      // Ensure letterType is set - use propSelectedLetterType as fallback
+      const finalLetterType = letterType || propSelectedLetterType || ''
+      
+      // Validate letter type
+      if (!finalLetterType || finalLetterType.trim() === '') {
+        Alert.alert('Error', 'Letter type is required. Please select a letter type.')
+        return
+      }
+
+      // Use the most complete content available (generatedLetter or streamingText)
+      const letterContent = generatedLetter || streamingText || ''
+      
+      if (!letterContent || letterContent.trim() === '') {
+        Alert.alert('Error', 'Letter content is required.')
+        return
+      }
+
+      console.log('💾 Saving letter with type:', finalLetterType)
+      console.log('💾 Letter data:', {
+        patientId: typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id,
+        type: finalLetterType,
+        contentLength: letterContent.length,
+        generatedLetterLength: generatedLetter.length,
+        streamingTextLength: streamingText.length,
+        hasRawTranscription: !!propInputText,
+        letterTypeState: letterType,
+        propSelectedLetterType: propSelectedLetterType
+      })
+
       const letterData = {
         patientId: typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id,
-        type: letterType,
-        content: generatedLetter,
+        type: finalLetterType,
+        content: letterContent,
         priority: 'medium' as const,
         notes: '',
         status: 'draft' as const,
@@ -189,9 +276,27 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
       onClose()
       onLetterCreated()
     } catch (error) {
-      console.error('Error saving letter:', error)
+      console.error('❌ Error saving letter:', error)
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert('Save Failed', 'Failed to save letter. Please try again.')
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to save letter. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Show full error message (don't truncate in alert)
+      Alert.alert(
+        'Save Failed', 
+        errorMessage,
+        [{ text: 'OK' }]
+      )
     }
   }
 
@@ -231,13 +336,28 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
           <ScrollView 
             style={styles.content}
             contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true}
+            bounces={true}
+            alwaysBounceVertical={false}
           >
-            {generatedLetter || streamingText ? (
-              <RenderHtml
-                contentWidth={340} // Fixed width for modal
-                source={{ html: isStreaming ? streamingText : generatedLetter }}
-                baseStyle={styles.htmlContent}
+            {isStreaming && !streamingText ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#6B7280" />
+                <Text style={styles.loadingText}>Preparing letter...</Text>
+              </View>
+            ) : (generatedLetter || streamingText) ? (
+              <>
+                {/* Debug info - remove in production */}
+                {__DEV__ && (
+                  <Text style={{ fontSize: 10, color: '#999', padding: 8 }}>
+                    Debug: generatedLetter={generatedLetter.length} chars, streamingText={streamingText.length} chars, isStreaming={isStreaming ? 'true' : 'false'}
+                  </Text>
+                )}
+                <RenderHtml
+                  contentWidth={contentWidth}
+                  source={{ html: isStreaming ? streamingText : generatedLetter }}
+                  baseStyle={styles.htmlContent}
                 tagsStyles={{
                   p: {
                     fontSize: 14,
@@ -318,7 +438,8 @@ const SimpleLetterDictation: React.FC<SimpleLetterDictationProps> = ({
                     color: '#000000',
                   }
                 }}
-              />
+                />
+              </>
             ) : (
               <View style={styles.emptyState}>
                 <ActivityIndicator size="large" color="#000000" />
@@ -372,7 +493,7 @@ const styles = StyleSheet.create({
   container: {
     width: '88%',
     maxWidth: 440,
-    height: '70%',
+    height: '85%',
     backgroundColor: '#FFFFFF',
     borderRadius: 4,
     overflow: 'hidden',
@@ -381,6 +502,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    flexDirection: 'column',
   },
   
   // Header - BASE
@@ -432,6 +554,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#000000',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#545454',
+    fontFamily: 'System',
+    letterSpacing: 0,
   },
   emptyState: {
     flex: 1,
